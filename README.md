@@ -1,98 +1,51 @@
 # FieldView
 
-FieldView is a data application for FIRST Robotics Competition. Its first-class web application makes competition data accessible and understandable through live event views, team/event information, and server-calculated analytics.
+FieldView is a data application for FIRST Robotics Competition. It acquires competition data from provider APIs, stores the provider resources, derives normalized FieldView state on demand, and serves that state to web and live clients.
 
-The priority is trustworthy data: acquiring it, reconciling it, deriving useful information from it, and presenting it clearly.
+## Final architecture
 
-## Product surfaces
-
-- **Events and teams** — browse current-season events and teams; team/event pages show district membership from their own provider data.
-- **Event pages** — view event information and competition context.
-- **Gameday** — compose live event views in the Tile View / Multiview surface, including match schedules, rankings, team tracking, and webcast presentation.
-- **Insights** — inspect match predictions, event analytics, team comparisons, and evidence for human scouting review.
-- **Remote display** — control a shared viewing session from a controller and present its state on connected displays.
-
-## Architecture migration
-
-The `fieldview-architecture-migration` branch is rebuilding FieldView around an npm-workspace monorepo with a retained Next.js frontend and a hybrid Cloudflare Workers/Durable Objects backend. The backend is deployed through one environment-neutral Runtime Worker named `runtime`, configured in `workers/fieldview/wrangler.toml`. Production uses the top-level configuration; branch testing uses Cloudflare Workers Previews under the same Worker, with preview-specific settings and isolated Durable Object namespaces. FieldView is its first product; the generic Runtime name leaves room for future FIRST program support without implying those integrations already exist.
-
-The legacy implementation described below is historical context for the migration. This branch follows the owner-approved retire-first, rebuild-cleanly strategy: temporary functionality loss is acceptable while replacement capabilities are built. No merge to `main`, production cutover, or deployed infrastructure changes are implied.
-
-- [Architecture migration plan](docs/architecture/MIGRATION-PLAN.md) — confirmed decisions, target boundaries, phases, exit criteria, and risks.
-- [Migration inventory](docs/architecture/MIGRATION-INVENTORY.md) — current routes, dependencies, environment variables, and target ownership mapping.
-- [Architecture decisions](docs/architecture/decisions/) — accepted repository/runtime direction, including [analytics ownership (ADR-0011)](docs/architecture/decisions/ADR-0011-ANALYTICS-OWNERSHIP.md).
-
-## Current architecture (legacy implementation)
-
-### Data acquisition
-
-- The Blue Alliance is the authoritative source for official event schedules, match results, teams, rankings, and OPR/DPR/CCWM data.
-- TBA requests pass through `src/lib/tba/client.ts` and `src/lib/tba/service.ts`, with Redis-backed response caching, ETag validation, and upstream `Cache-Control` freshness.
-- TBA webhooks authenticate through `X-TBA-HMAC`, attempt to update existing cached match data, and publish event-scoped updates through Redis Pub/Sub and `/api/ws`. Cache coherence is not yet complete across standalone/team-scoped matches and dependent status/alliance/OPR resources; see the [application audit](docs/APPLICATION-AUDIT.md).
-- Statbotics and FRC Colors are enrichment providers behind server-side clients/services. The current Statbotics runtime host and its mismatch with the project's official-provider requirement are recorded in the [application audit](docs/APPLICATION-AUDIT.md).
-
-### Live event state
-
-The normal browser live path uses one origin-wide SharedWorker to own the event WebSocket and one `EventState` per active event. Tabs receive snapshots through MessagePorts. EventState owns event acquisition and reconciliation; its current snapshot exposes only coarse global loading/error/WebSocket-stale state rather than per-resource freshness/failure metadata. If SharedWorker is unavailable, the client uses a per-tab fallback (whose WebSocket idle teardown remains incomplete; see the audit).
-
-Remote displays consume controller-published snapshots and do not create independent event acquisition paths.
-
-### Event Analytics
-
-Event Analytics calculations and orchestration live on the server under `src/lib/insights/`. The current dashboard retrieves an `EventAnalytics` snapshot through `/api/insights/event/<event>`; that HTTP lifecycle is separate from the SharedWorker-owned EventState lifecycle. The versioned EventAnalytics envelope is an initial compatibility contract, not yet a fully provider-independent DTO.
-
-See [EVENT-STATE-AND-ANALYTICS.md](docs/EVENT-STATE-AND-ANALYTICS.md) for the current lifecycle and intended integration sequence.
-
-### Event timezone
-
-All event-related dates and times displayed by FieldView must use the event's IANA timezone. For multi-event views, each event uses its own timezone.
+- **Frontend:** Next.js 16 / React 19 in `apps/web`, hosted on Vercel. Vercel is a frontend host only; it does not own provider acquisition, event state, analytics orchestration, webhook processing, or realtime delivery.
+- **Runtime:** one environment-neutral Cloudflare Worker named `runtime`, composed from `workers/fieldview/src/index.ts` and configured by `workers/fieldview/wrangler.toml`. Branch and PR testing uses Cloudflare Worker Preview URLs and isolated Preview bindings, not Wrangler named environments.
+- **Canonical resources:** EventRuntime and TeamRuntime Durable Objects persist provider endpoint responses and their validators/metadata. These provider records are the durable source of truth.
+- **Read projections:** EventState and TeamState are normalized client contracts. A read builds the appropriate projection from the stored endpoint records. A DO may reuse an in-memory hot projection, but a cold read regenerates it. A read must not write Durable Object storage. A persisted projection is never required to exist.
+- **Acquisition and scheduling:** Cloudflare Workflows and the Worker-level polling coordinator perform discovery, bootstrap, provider refresh, and analytics orchestration. There is no queue-based compatibility path and no Durable Object alarm polling.
+- **Storage:** Durable Object SQLite owns event/team provider resources and runtime-scoped data; D1 owns discovery and operational/system records; KV is limited to lightweight projections and canonical pointers. The architecture does not use R2.
+- **Realtime:** the browser SharedWorker multiplexes canonical subscriptions to the Worker `/stream` endpoint. It does not fetch provider APIs or run a second EventState polling implementation. Snapshot recovery uses the Worker snapshot endpoints.
+- **Webhooks:** TBA posts directly to the Worker's `/webhooks/tba` endpoint. There is no Vercel relay or Redis Pub/Sub fan-out.
+- **Remote display:** RemoteSessionRuntime owns WebRTC signaling over hibernatable Durable Object WebSockets; it does not use Redis leases, Vercel WebSockets, heartbeats, or alarm polling.
 
 ## Development
 
-Create one ignored environment file at the repository root:
+Install dependencies with `npm ci`.
 
-```bash
-npm install
-touch .env
-```
-
-Keep all local web and Worker environment values in that root `.env`. Do not create workspace-specific `.env.local`, `.dev.vars`, or other duplicate secret files. The root `.env` is ignored by Git.
-
-Run the web app and checks:
+Run the frontend and Worker separately:
 
 ```bash
 npm run dev
+npm run dev:worker
+```
+
+Local Worker secrets and variables belong in `workers/fieldview/.dev.vars` (copy the example file there). Frontend deployment variables belong to the Vercel project configuration; do not place Worker secrets in frontend-visible variables. Do not create a root `.env` file.
+
+Validate the repository:
+
+```bash
+npm run typecheck
+npm test
 npm run lint
 npm run build
 ```
 
-Run the consolidated Cloudflare Worker locally with the same root file. To create or update the current branch's Cloudflare Preview, use `npx --yes wrangler@^4.135.0 preview` (Preview URLs are enabled in the Worker configuration):
+TBA and Statbotics generated types are maintained by the provider packages. The root scripts regenerate them through `predev` and `prebuild`.
 
-```bash
-npm run dev:worker
-```
+## Integration status
 
-The `dev:worker` script loads the root `.env`, then starts Wrangler with `workers/fieldview/wrangler.toml` without a named environment. The top-level configuration is the production Worker configuration; the `previews` block defines branch-preview variables and bindings. Local development uses local bindings and the root `.env`; do not select a Wrangler environment.
+The `fieldview-architecture-migration` branch is the target architecture and the integration-testing candidate. The branch has not been deployed to Cloudflare, merged into `main`, or used for production data. No legacy queue messages, deployed resources, or production data are migration requirements. Final integration testing must validate clean resource creation, provider bootstrap, read-time projection, zero-write reads, polling, analytics, realtime subscriptions, webhook authentication, and remote-session signaling before merge and production deployment.
 
-TBA and Statbotics types are generated from their upstream OpenAPI documents. The `predev` and `prebuild` lifecycle scripts regenerate both type sets automatically. To run either generator directly:
+## Architecture references
 
-```bash
-npm run generate:tba-types
-npm run generate:statbotics-types
-```
-
-Do not commit secrets. Add only the variables required by the services you run locally (for example, `TBA_API_KEY`, `TBA_WEBHOOK_SECRET`, `RUNTIME_ADMIN_TOKEN`, and any legacy web-service credentials still needed by your local setup).
-
-Run repository validation with `npm run typecheck`, `npm test`, and `npm run lint`. These checks cover the web application, domain, analytics, provider packages, and Worker modules.
-
-## Documentation
-
-- [Application audit](docs/APPLICATION-AUDIT.md) — verified legacy implementation map, findings, and follow-up priorities.
-- [Architecture](docs/ARCHITECTURE.md) — current boundaries and target architecture.
-- [EventState and EventAnalytics lifecycle](docs/EVENT-STATE-AND-ANALYTICS.md) — live state, analytics acquisition, contract, and integration plan.
-- [Analytics redesign](docs/ANALYTICS-REDESIGN.md) — metric definitions, baselines, and limitations.
-- [Color system](docs/COLOR-SYSTEM.md) — brand and semantic color roles.
-- [TBA API typing](docs/TBA-TYPES.md) — generated and application-facing TBA types.
-- [Statbotics API typing](docs/STATBOTICS-TYPES.md) — generated and application-facing Statbotics types.
-
-Repository agent instructions are in [AGENTS.md](AGENTS.md). `CLAUDE.md` points to the same instructions.
+- [Architecture overview](docs/ARCHITECTURE.md)
+- [Final integration plan](docs/architecture/MIGRATION-PLAN.md)
+- [Target resource inventory](docs/architecture/MIGRATION-INVENTORY.md)
+- [Retirement audit](docs/architecture/RETIREMENT-AUDIT.md)
+- [Architecture decisions](docs/architecture/decisions/)
