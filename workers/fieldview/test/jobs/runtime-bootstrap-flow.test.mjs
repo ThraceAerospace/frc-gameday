@@ -15,7 +15,7 @@ const [readiness, polling, acquisition, eventRuntime, teamRuntime, dispatch] = a
 test("season readiness workflows acquire and hand off initial state for both entity kinds", () => {
   assert.match(readiness, /acquireRuntimeBootstrap/);
   assert.match(readiness, /dispatchRuntime\(env, kind, key, "bootstrap"/);
-  assert.match(readiness, /bootstrapped: false, already_initialized: true, publication_status: "existing"/);
+  assert.match(readiness, /bootstrapped: false, already_initialized: true, resource_status: "existing"/);
   assert.match(readiness, /!item\.bootstrapped && !item\.already_initialized/);
   assert.match(readiness, /already_initialized/);
   const workflow = readiness.slice(readiness.indexOf("async function runSeasonReadiness"), readiness.indexOf("export class EventSeasonReadinessWorkflow"));
@@ -42,13 +42,15 @@ test("workflow bootstrap acquisition covers all current EventRuntime and TeamRun
   assert.match(acquisition, /for \(const resource of resources\)/);
 });
 
-test("both Durable Objects validate and persist bootstrap bundles before publishing", () => {
+test("both Durable Objects bootstrap provider resources without materializing client state", () => {
   for (const source of [eventRuntime, teamRuntime]) {
     assert.match(source, /validateRuntimeBootstrapBundle/);
     assert.match(source, /url\.pathname === "\/bootstrap"/);
     assert.match(source, /bootstrap:accepted:/);
     assert.match(source, /lastWebhookAt > body\.acquired_at/);
-    assert.match(source, /await this\.(publishEventState|snapshot)\(/);
+    const bootstrap = source.slice(source.indexOf('url.pathname === "/bootstrap"'), source.indexOf('url.pathname === "/bootstrap"') + 9000);
+    assert.doesNotMatch(bootstrap, /await this\.(publishEventState|snapshot)\(/);
+    assert.match(bootstrap, /resource_status/);
   }
   assert.match(dispatch, /bootstrap: "bootstrap"/);
   assert.match(dispatch, /action === "bootstrap" \? "bootstrap\?year="/);
