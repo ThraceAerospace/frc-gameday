@@ -115,7 +115,6 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
   const [matchAnalysisLoading, setMatchAnalysisLoading] = useState(false);
   const [matchAnalysisError, setMatchAnalysisError] = useState<string | null>(null);
   const [matchAnalysisRefreshKey, setMatchAnalysisRefreshKey] = useState(0);
-  const lastMatchAnalysisRefreshKey = useRef(0);
 
   const load = useCallback(async () => {
     refreshCanonicalEventSnapshot(eventKey);
@@ -129,8 +128,6 @@ export default function EventAnalyticsDashboard({ eventKey, eventName, eventStat
     let active = true;
     setMatchAnalysisA(null);
     setMatchAnalysisLoading(true); setMatchAnalysisError(null);
-    const shouldRefresh = matchAnalysisRefreshKey > lastMatchAnalysisRefreshKey.current;
-    if (shouldRefresh) lastMatchAnalysisRefreshKey.current = matchAnalysisRefreshKey;
     const runtimeOrigin = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
     if (!runtimeOrigin) {
       setMatchAnalysisError("FieldView runtime is not configured");
