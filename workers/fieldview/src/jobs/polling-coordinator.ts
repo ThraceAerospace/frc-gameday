@@ -280,9 +280,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           bundle as unknown as Record<string, unknown>, discovery.year);
         if (!outcome.ok) throw new Error("Initial EventRuntime bootstrap failed for " + item.key +
           " with HTTP " + outcome.status + ": " + (await outcome.text().catch(() => "")).slice(0, 180));
-        const receipt = await outcome.json() as { accepted?: unknown; publication_status?: unknown };
+        const receipt = await outcome.json() as { accepted?: unknown; resource_status?: unknown };
         if (receipt.accepted !== true) throw new Error("EventRuntime did not confirm bootstrap acceptance for " + item.key);
-        return { key: item.key, status: "acquired" as const, publication_status: receipt.publication_status ?? "unknown" };
+        return { key: item.key, status: "acquired" as const, resource_status: receipt.resource_status ?? "unknown" };
       }),
     );
 
@@ -447,9 +447,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           bundle as unknown as Record<string, unknown>, discovery.year);
         if (!outcome.ok) throw new Error("Initial TeamRuntime bootstrap failed for " + teamKey +
           " with HTTP " + outcome.status + ": " + (await outcome.text().catch(() => "")).slice(0, 180));
-        const receipt = await outcome.json() as { accepted?: unknown; publication_status?: unknown };
+        const receipt = await outcome.json() as { accepted?: unknown; resource_status?: unknown };
         if (receipt.accepted !== true) throw new Error("TeamRuntime did not confirm bootstrap acceptance for " + teamKey);
-        return { key: teamKey, status: "acquired" as const, publication_status: receipt.publication_status ?? "unknown" };
+        return { key: teamKey, status: "acquired" as const, resource_status: receipt.resource_status ?? "unknown" };
       }),
     );
 
