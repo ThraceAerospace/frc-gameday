@@ -462,7 +462,7 @@ export class EventRuntime extends DurableObjectBase {
         return Response.json({ error: "Expected a valid topic, subscribe or unsubscribe action, and an optional positive generation" }, { status: 400 });
       }
       if (body.action === "subscribe") {
-        const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+        const currentState = await this.publishEventState();
         if (!currentState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
         if (currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
             currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
@@ -498,13 +498,18 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "POST" && url.pathname === "/readiness") {
-      const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const validState = Boolean(publication && publication.status !== "failed" &&
-        Number.isSafeInteger(publication.snapshotVersion) && isRecord(publication.state) &&
-        publication.state.event_key === this.eventKey && isRecord(publication.state.sources));
       const sources = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const expectedEndpoints = [...this.allowedEndpoints,
         STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
+      // Readiness describes provider-resource availability, not the existence
+      // of a materialized EventState publication.
+      const validState = expectedEndpoints.every((endpoint) => {
+        const source = sources.get(endpointStorageKey(endpoint));
+        return Boolean(source && (
+          source.lastFetchedAt !== null || source.lastWebhookAt !== null ||
+          source.status === "unavailable"
+        ));
+      });
       const body: unknown = await request.json().catch(() => null);
       const requestedInterval = isRecord(body) ? body.minimumIntervalMs : undefined;
       const minimumIntervalMs = typeof requestedInterval === "number" &&
@@ -523,11 +528,15 @@ export class EventRuntime extends DurableObjectBase {
           (!attemptedRecently && source.expiresAt !== null && source.expiresAt <= now);
       });
       const refreshRequired = !validState || staleSources.length > 0;
-      const latestPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const resourceStatuses = expectedEndpoints.map((endpoint) =>
+        sources.get(endpointStorageKey(endpoint))?.status ?? "missing");
+      const stateStatus = validState
+        ? resourceStatuses.some((status) => status === "failed" || status === "stale") ? "stale" : "available"
+        : "missing";
       return Response.json({
         event_key: this.eventKey,
-        state_valid: Boolean(latestPublication && latestPublication.status !== "failed"),
-        publication_status: latestPublication?.status ?? "missing",
+        state_valid: validState,
+        publication_status: stateStatus,
         stale_sources: staleSources,
         refresh_required: refreshRequired,
         refresh_dispatched: false,
@@ -733,7 +742,7 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "GET" && url.pathname === "/stream") {
-      const currentState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const currentState = await this.publishEventState();
       if (!currentState) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
         if (currentState.status === "failed" || !Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
           currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
@@ -750,7 +759,7 @@ export class EventRuntime extends DurableObjectBase {
       return this.env.webSocketResponseFactory ? this.env.webSocketResponseFactory(pair[0]) : new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit & { webSocket: WebSocket });
     }
     if (request.method === "GET" && url.pathname === "/analytics") {
-      const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const eventState = await this.publishEventState();
       if (!eventState) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       if (eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
@@ -801,7 +810,7 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "GET" && url.pathname === "/statbotics-match") {
-      const eventState = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const eventState = await this.publishEventState();
       if (!eventState) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       if (eventState.status === "failed" || !Number.isSafeInteger(eventState.snapshotVersion) || !isRecord(eventState.state) ||
           eventState.state.event_key !== this.eventKey || !isRecord(eventState.state.sources)) {
@@ -871,7 +880,7 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "GET" && url.pathname === "/view") {
-      const publication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
+      const publication = await this.publishEventState();
       if (!publication) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       if (publication.status === "failed" || !Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
           publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
