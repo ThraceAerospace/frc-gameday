@@ -12,6 +12,9 @@ import { EventAnalyticsWorkflow } from "./event-analytics.ts";
 export { PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow };
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import type { RuntimeAdminParameters } from "./runtime-admin.ts";
+import { EventSeasonReadinessWorkflow, TeamSeasonReadinessWorkflow, SeasonStatusResolverWorkflow } from "./season-readiness.ts";
+import type { SeasonEnvironment } from "./season-readiness.ts";
+export { EventSeasonReadinessWorkflow, TeamSeasonReadinessWorkflow, SeasonStatusResolverWorkflow };
 export { RuntimeAdminWorkflow };
 
 interface DiscoveryDocument {
@@ -23,7 +26,7 @@ interface DiscoveryDocument {
   checkedAt: number;
 }
 
-interface JobsEnvironment extends RuntimeEnvironment {
+interface JobsEnvironment extends RuntimeEnvironment, SeasonEnvironment {
   DAILY_EVENT_READINESS: Workflow;
   DAILY_TEAM_READINESS: Workflow;
   COVERAGE_AUDIT: Workflow;
@@ -1265,7 +1268,7 @@ export default {
         const recordObject = await store.get(`${prefix}/record.json`);
         if (!recordObject) return Response.json({ error: "Workflow run not found" }, { status: 404 });
         const record = await recordObject.json<Record<string, unknown>>();
-        const workflowBinding = type === "event-readiness" ? env.DAILY_EVENT_READINESS : env.DAILY_TEAM_READINESS;
+        const workflowBinding = type === "event-readiness" ? env.EVENT_SEASON_READINESS : env.TEAM_SEASON_READINESS;
         let workflowStatus: string | null = null;
         let workflowError: string | null = null;
         try {
@@ -1308,7 +1311,7 @@ export default {
         let record = recordObject ? await recordObject.json<Record<string, unknown>>() : {};
         if (id && ["running", "queued"].includes(String(record.status))) {
           try {
-            const binding = type === "event-readiness" ? env.DAILY_EVENT_READINESS : env.DAILY_TEAM_READINESS;
+            const binding = type === "event-readiness" ? env.EVENT_SEASON_READINESS : env.TEAM_SEASON_READINESS;
             const workflowStatus = (await binding.get(id).then((instance) => instance.status())).status;
             if (workflowStatus === "errored" || workflowStatus === "terminated") {
               record = { ...record, status: workflowStatus === "errored" ? "failed" : "cancelled",
@@ -1362,68 +1365,30 @@ export default {
       });
     }
 
-    if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
-      if (!env.RUNTIME_ADMIN_TOKEN ||
-          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
+    if ((url.pathname === "/internal/admin/event-season-readiness" ||
+         url.pathname === "/internal/admin/team-season-readiness") && request.method === "POST") {
+      if (!env.RUNTIME_ADMIN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
         return Response.json({ error: "Unauthorized" }, { status: 401 });
       }
+      const body = await request.json().catch(() => null) as { year?: unknown } | null;
+      const year = body?.year;
+      if (!Number.isInteger(year) || Number(year) < 1992 || Number(year) > 2200) return Response.json({ error: "A four-digit season year is required" }, { status: 400 });
+      const kind = url.pathname.includes("event-") ? "event" : "team";
       const scheduledAt = Date.now();
-      const id = `daily-event-readiness-${scheduledAt}`;
-      const store = createDiscoveryServiceClient(env);
-      const initial = {
-        workflow_id: id, workflow_type: "event-readiness", status: "queued",
-        started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
-        year: null, total: 0, summary: null, result_chunks: 0, error: null,
-      };
-      await store.put(`admin/workflow-runs/event-readiness/${id}/record.json`, JSON.stringify(initial), {
-        httpMetadata: { contentType: "application/json" },
-      });
-      await store.put(`admin/workflow-runs/index/event-readiness/${String(scheduledAt).padStart(16, "0")}-${id}.json`,
-        JSON.stringify({ workflow_id: id, workflow_type: "event-readiness", started_at: scheduledAt, year: null, status: "queued" }),
-        { httpMetadata: { contentType: "application/json" } });
-      try {
-        await env.DAILY_EVENT_READINESS.create({ id, params: { scheduledAt } });
-      } catch (error) {
-        const failed = { ...initial, status: "failed", updated_at: Date.now(), completed_at: Date.now(),
-          error: error instanceof Error ? error.message : String(error) };
-        await store.put(`admin/workflow-runs/event-readiness/${id}/record.json`, JSON.stringify(failed), {
-          httpMetadata: { contentType: "application/json" },
-        });
-        return Response.json({ ...failed }, { status: 409 });
-      }
-      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "queued" }, { status: 202 });
+      const id = kind + "-season-readiness-" + Number(year) + "-" + scheduledAt;
+      const workflow = kind === "event" ? env.EVENT_SEASON_READINESS : env.TEAM_SEASON_READINESS;
+      try { await workflow.create({ id, params: { year: Number(year), requestedAt: scheduledAt } }); }
+      catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unable to start season readiness" }, { status: 409 }); }
+      return Response.json({ workflow_id: id, workflow_type: kind + "-readiness", year: Number(year), scheduled_at: scheduledAt, status: "queued" }, { status: 202 });
     }
 
-    if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
-      if (!env.RUNTIME_ADMIN_TOKEN ||
-          request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) {
-        return Response.json({ error: "Unauthorized" }, { status: 401 });
-      }
+    if (url.pathname === "/internal/admin/season-status-resolver" && request.method === "POST") {
+      if (!env.RUNTIME_ADMIN_TOKEN || request.headers.get("Authorization") !== `Bearer ${env.RUNTIME_ADMIN_TOKEN}`) return Response.json({ error: "Unauthorized" }, { status: 401 });
       const scheduledAt = Date.now();
-      const id = `daily-team-readiness-${scheduledAt}`;
-      const store = createDiscoveryServiceClient(env);
-      const initial = {
-        workflow_id: id, workflow_type: "team-readiness", status: "queued",
-        started_at: scheduledAt, updated_at: scheduledAt, completed_at: null,
-        year: null, total: 0, summary: null, result_chunks: 0, error: null,
-      };
-      await store.put(`admin/workflow-runs/team-readiness/${id}/record.json`, JSON.stringify(initial), {
-        httpMetadata: { contentType: "application/json" },
-      });
-      await store.put(`admin/workflow-runs/index/team-readiness/${String(scheduledAt).padStart(16, "0")}-${id}.json`,
-        JSON.stringify({ workflow_id: id, workflow_type: "team-readiness", started_at: scheduledAt, year: null, status: "queued" }),
-        { httpMetadata: { contentType: "application/json" } });
-      try {
-        await env.DAILY_TEAM_READINESS.create({ id, params: { scheduledAt } });
-      } catch (error) {
-        const failed = { ...initial, status: "failed", updated_at: Date.now(), completed_at: Date.now(),
-          error: error instanceof Error ? error.message : String(error) };
-        await store.put(`admin/workflow-runs/team-readiness/${id}/record.json`, JSON.stringify(failed), {
-          httpMetadata: { contentType: "application/json" },
-        });
-        return Response.json({ ...failed }, { status: 409 });
-      }
-      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "running" }, { status: 202 });
+      const id = "season-status-resolver-" + scheduledAt;
+      try { await env.SEASON_STATUS_RESOLVER.create({ id, params: { requestedAt: scheduledAt } }); }
+      catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Unable to start canonical season resolver" }, { status: 409 }); }
+      return Response.json({ workflow_id: id, scheduled_at: scheduledAt, status: "queued" }, { status: 202 });
     }
     return Response.json({ error: "Not found" }, { status: 404 });
   },
