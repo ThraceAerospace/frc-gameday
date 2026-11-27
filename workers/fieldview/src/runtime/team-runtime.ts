@@ -388,46 +388,9 @@ export class TeamRuntime extends DurableObjectBase {
     }
 
     if (publicRead) {
-      // Serve the last atomically published representation. A GET never
-      // rebuilds/persists a snapshot and never materializes another season.
-      const stateKey = `team-state:${year}`;
-      const publication = this.publishedSnapshots.get(year) ??
-        await this.storage.get<{
-          input_signature: string;
-          representation_signature?: string;
-          state: ReturnType<typeof normalizeFieldViewTeamState>;
-        }>(stateKey + ":publication");
-      const publishedState = publication?.state as Record<string, unknown> | undefined;
-      if (!publication) return Response.json({ error: "TeamState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
-      if (typeof publication.input_signature !== "string" || !publishedState || publishedState.team_key !== this.teamKey || publishedState.year !== year ||
-          !publishedState.sources || typeof publishedState.sources !== "object" || Array.isArray(publishedState.sources)) {
-        return Response.json({ error: "Invalid TeamState publication", team_key: this.teamKey, year }, {
-          status: 500, headers: { "Cache-Control": "no-store" },
-        });
-      }
-      const resources = this.endpoints(year);
-      const states = await Promise.all(resources.map(({ endpoint }) =>
-        this.storage.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
-      const now = Date.now();
-      const signature = JSON.stringify(states.map((state) => state ? [
-        state.revision, state.status, state.lastFetchedAt, state.expiresAt,
-        state.etag, state.expiresAt !== null && state.expiresAt < now,
-      ] : null));
-      const stale = publication.input_signature !== signature;
-      const etag = 'W/"fv-team-snapshot-v1-' + year + '-' +
-        (await this.storage.get<number>("snapshot-revision") ?? 0) + '-' +
-        await hashSignature(publication.input_signature) + '"';
-      const headers = {
-        "X-FieldView-Snapshot-Version": String(await this.storage.get<number>("snapshot-revision") ?? 0),
-        "X-FieldView-Publication-Status": stale ? "stale" : "available",
-        "X-FieldView-Revalidation": "idle",
-        ETag: etag,
-        "Cache-Control": "private, no-cache",
-      };
-      if (etagMatches(request.headers.get("If-None-Match"), etag)) {
-        return new Response(null, { status: 304, headers });
-      }
-      return Response.json(publication.state, { headers });
+      // A materialized TeamState is optional. If absent or stale, derive it
+      // from endpoint records without persisting the read-time projection.
+      return this.snapshot(year, request);
     }
 
     // Only explicit mutation commands may materialize TeamState. All GET
@@ -1133,7 +1096,7 @@ export class TeamRuntime extends DurableObjectBase {
     const representationSignature = JSON.stringify(inputs.states.map((state) => state ? [
       state.revision, state.lastFetchedAt, state.etag,
     ] : null));
-    const cached = await this.storage.get<{
+    const cached = this.publishedSnapshots.get(year) ?? await this.storage.get<{
       input_signature: string;
       representation_signature?: string;
       state: ReturnType<typeof normalizeFieldViewTeamState>;
@@ -1191,17 +1154,15 @@ export class TeamRuntime extends DurableObjectBase {
     // Publish only if the provider inputs still match the exact read set used
     // to build this object. The publication and compatibility state key move
     // together in one transaction, so readers never observe a partial state.
-    const published = await this.storage.transaction(async (tx) => {
+    // Confirm the read set is still current, but never write a projection as
+    // a side effect of GET. A concurrent provider update simply retries.
+    const stillCurrent = await this.storage.transaction(async (tx) => {
       const currentStates = await Promise.all(resources.map(({ endpoint }) =>
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
-      if (inputSignature(currentStates) !== signature) return false;
-      await tx.put(publicationKey, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
-      // The publication is the single canonical persisted TeamState record.
-      // Remove the legacy duplicate in the same transaction as replacement.
-      await tx.delete(legacyStateKey);
-      return true;
+      return inputSignature(currentStates) === signature;
     });
-    if (!published) return this.snapshot(year, request);
+    if (!stillCurrent) return this.snapshot(year, request);
+
 
     this.publishedSnapshots.set(year, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
     return Response.json(snapshot, { headers: responseHeaders });
