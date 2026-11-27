@@ -1,70 +1,58 @@
 # ADR-0011: Analytics ownership follows analytical scope
 
-- **Status:** Accepted
+- **Status:** Accepted, clarified by ADR-0020
 - **Date:** 2026-11-20
 - **Decision owners:** FieldView project
 
 ## Context
 
-Analytics is FieldView's primary product. EventRuntime, TeamRuntime, and TaskScheduler exist to acquire, maintain, and coordinate the data from which reusable analytics are produced. Analytics ownership must follow the subject and scope of each calculation, rather than defaulting to the runtime that happens to assemble an event response.
+Analytics ownership follows the subject and scope of each calculation, not the runtime that happens to assemble an event response. Team performance depends on team season history and event comparison context; event-wide metrics describe the event field.
 
-A team's event performance is interpreted against its own season history and the event's participating teams. TeamRuntime is authoritative for the team's season data and calculates that team's results. EventRuntime knows the event roster and builds one consistent, versioned comparison input from the season states supplied by all participating TeamRuntimes.
+## Runtime ownership
 
-## Decision
+- **TeamRuntime** owns team canonical data and team-scoped analytics, including season metrics and FieldViewTeamEventAnalytics for each event in which the team participates.
+- **TeamRuntime** owns persisted team/provider endpoint records and purpose-specific team/event analytics outputs. TeamState itself is an ephemeral normalized read projection under ADR-0020.
+- **EventRuntime** owns event canonical data and FieldViewEventAnalytics: match flags, prediction accuracy, scoring distributions, alliance analysis, event-wide rankings, and other metrics whose subject is the event field.
+- EventRuntime builds a versioned FieldViewEventTeamSeasonComparisonInput from the event roster and participating TeamRuntime-owned season data, then supplies that input and event calculation context to each TeamRuntime. It does not calculate or persist team-specific results.
+- EventRuntime may rank, aggregate, or compare already-calculated team metrics, but must not become a second authoritative calculator for team-scoped metrics.
+- Durable Workflows own cross-runtime orchestration, runtime initialization, and durable roster/analytics operations. The polling coordinator dispatches runtime refreshes; there is no TaskScheduler Durable Object.
 
-### Runtime ownership
+## Event FieldView composition
 
-- **TeamRuntime** owns canonical team data and all team-scoped analytics. This includes season-level metrics and FieldViewTeamEventAnalytics for each event in which the team participates.
-- **TeamRuntime** persists FieldViewTeamState (team profile and season data), FieldViewTeamEventState (that team's event participation), and FieldViewTeamEventAnalytics. Team event states are independently addressable and reusable by team pages, event views, and other product surfaces.
-- **EventRuntime** builds a FieldViewEventTeamSeasonComparisonInput from the event roster and the participating TeamRuntime FieldViewTeamState records, then supplies that input and the event calculation context to each participating TeamRuntime. It does not calculate or persist team-specific results.
-- **EventRuntime** owns canonical event data and FieldViewEventAnalytics: match flags, prediction accuracy, scoring distributions, alliance analysis, event-wide rankings, largest/smallest team metric changes, and other metrics whose subject is the event field.
-- **EventRuntime** consumes the participating teams' FieldViewTeamEventState records. It may rank, aggregate, or compare their already-calculated team metrics, but it must not become a second authoritative calculator for team-scoped metrics.
-- **TaskScheduler** owns scheduled system coordination, runtime initialization, and roster reconciliation. Roster additions/removals are reconciled by scheduled work; ordinary event reads do not perform roster reconciliation.
+A consumer-facing event view is composed from:
+1. EventRuntime-owned event state projection;
+2. EventRuntime-owned event analytics publication; and
+3. logical references to each roster participant's TeamRuntime-owned team-event state, with explicit coverage.
 
-### Event FieldView composition
+The view does not embed complete TeamEventState records. EventRuntime's analytics operation retrieves participant inputs through owner interfaces, uses the combined working set only in memory, and persists only its own analytics output with source revisions and coverage. A consumer that needs detailed TeamEventState resolves it through the owning TeamRuntime.
 
-A complete event FieldView is represented by FieldViewEventView and is composed from:
+A TeamRuntime-owned team-event state stores team/event identity, provenance, team analytics, and logical references to EventRuntime-owned event-team and match records. It does not copy full team profiles, event-team participation objects, or match objects into the team runtime's database.
 
-1. EventRuntime-owned FieldViewEventState;
-2. EventRuntime-owned FieldViewEventAnalytics; and
-3. logical references to each roster participant's TeamRuntime-owned FieldViewTeamEventState, with explicit coverage.
+## Analytics lifecycle and provenance
 
-The view does not embed TeamEventState records. EventRuntime's background analytics operation retrieves each participant's state from its owner, uses the combined input only in memory, and persists only FieldViewEventAnalytics with source revisions and coverage. A consumer that needs a detailed TeamEventState resolves its reference through the owning TeamRuntime. Partial composition is permitted and must expose missing/pending team states rather than silently treating the event as complete.
+Every persisted analytics result has an explicit owner and scope, calculation/definition version, calculation timestamp, source state revisions or input digest, status/coverage distinguishing complete, partial, unavailable, stale, and failed inputs, and a recalculation path when dependencies change.
 
-A TeamRuntime-owned FieldViewTeamEventState stores team/event identity, provenance, team analytics, and logical references to EventRuntime-owned FieldViewEventTeam and FieldViewMatch records. It does not copy the full team profile, event-team participation object, or match objects into the team runtime's database.
+TeamRuntime calculates team metrics against its own season data and the versioned comparison input supplied by EventRuntime. EventRuntime calculates event-wide metrics from event-owned inputs and returned team-event analytics. Recalculation is idempotent and must not erase the last usable result on failure.
 
-### Analytics lifecycle and provenance
+## Naming
 
-Every persisted analytics result has an explicit owner and scope, calculation/definition version, calculation timestamp, source state revisions or equivalent input manifest/digest, status/coverage distinguishing complete, partial, unavailable, stale, and failed inputs, and an invalidation/recalculation path when a dependency changes.
+Provider-originated data keeps provider prefixes such as TBA, Statbotics, and FRCColors. Models and calculations generated by FieldView use the `FieldView` prefix.
 
-TeamRuntime calculates team metrics against its own season data and the versioned FieldViewEventTeamSeasonComparisonInput supplied by EventRuntime. It persists the resulting FieldViewTeamEventAnalytics and FieldViewTeamEventState. When a TeamState changes, TeamRuntime notifies its known EventRuntimes; EventRuntime rebuilds the comparison input and requests recalculation. EventRuntime calculates event-wide metrics from event inputs and the returned TeamEventStates. Recalculation is idempotent and must not erase the last usable result on failure.
+Canonical concepts include:
+- `FieldViewTeamState`: normalized team profile/season read projection, owned by TeamRuntime's endpoint records.
+- `FieldViewTeamEventState`: one team's participation at one event, owned by TeamRuntime.
+- `FieldViewTeamEventAnalytics`: analytics about one team's performance at one event, owned by TeamRuntime.
+- `FieldViewEventState`: normalized event read projection, derived by EventRuntime.
+- `FieldViewEventAnalytics`: analytics about the event and its field, owned by EventRuntime.
 
-### Naming convention
+## Comparison inputs
 
-Every model name identifies its origin:
-
-- Provider-originated data keeps the provider prefix, such as TBA..., Statbotics..., and FRCColors....
-- Any model, normalization, correlation, or analytical result generated by FieldView uses the FieldView... prefix.
-
-Canonical team model names:
-
-- FieldViewTeamState: team profile and season-scoped data, owned by TeamRuntime.
-- FieldViewTeamEventState: one team's participation at one event, owned by TeamRuntime.
-- FieldViewTeamEventAnalytics: analytics about one team's performance at one event, owned by TeamRuntime.
-- FieldViewEventState: canonical event data, owned by EventRuntime.
-- FieldViewEventAnalytics: analytics about the event and its field, owned by EventRuntime.
-
-The old FieldViewTeamSnapshot and FieldViewTeamAnalytics names are compatibility aliases only during migration and must not be used for new code.
-
-### Comparison inputs
-
-The old term “season cohort” is replaced by **FieldViewEventTeamSeasonComparisonInput** because this is a calculation input, not a product model. EventRuntime assembles it from all participating teams' FieldViewTeamState records so every team's comparison uses the same event population and source revisions. It passes the input to each TeamRuntime. Each TeamRuntime uses the shared input plus its own authoritative season state to calculate and persist only its team's result. TeamRuntime does not independently discover every other team or rebuild a competing comparison population. The full comparison input is not duplicated as durable state in every TeamRuntime; the resulting team-specific analytics are.
+`FieldViewEventTeamSeasonComparisonInput` is a calculation input, not a product model. EventRuntime assembles it from participating teams' season data so each team's comparison uses the same event population and source revisions. It passes the input to each TeamRuntime. Each TeamRuntime uses the shared input plus its own authoritative season data to calculate and persist only its team's result. The complete comparison input is not duplicated as durable state in every TeamRuntime.
 
 ## Consequences
 
 - Team metrics can be recalculated independently when a team's season data changes.
-- Event-wide analytics become a composition/aggregation of TeamRuntime outputs plus event-owned inputs.
-- Team analytics are reusable across product surfaces without requiring an event analytics request.
-- EventRuntime no longer owns team analytics persistence or team-specific calculation retries. It owns comparison-input assembly and retries delivery/recalculation when team states are missing or stale.
-- Runtime communication carries TeamState source revisions into FieldViewEventTeamSeasonComparisonInput and event source revisions into TeamRuntime calculations, allowing stale or incomplete results to be detected.
-- The former EventRuntime-owned team analytics/cohort publication has been replaced by the shared comparison-input handoff and TeamRuntime-owned TeamEventState persistence. The legacy Redis implementation remains historical migration context only.
+- Event-wide analytics compose team-owned outputs with event-owned inputs.
+- Team analytics are reusable across product surfaces.
+- Cross-runtime operations use explicit versioned inputs/references; one runtime does not persist another runtime's canonical aggregate.
+- EventState/TeamState projection persistence is not required for analytics readiness. Analytics publications have their own persistence and revision contract.
