@@ -1,11 +1,13 @@
 # ADR-0015: Persistence equals readiness and reads are stale-while-revalidate
 
-- **Status:** Accepted (partially superseded by ADR-0018)
+- **Status:** Accepted for provider-resource persistence; normalized-state/read behavior superseded by ADR-0018 and ADR-0020
 - **Date:** 2026-11-21
 - **Decision owners:** FieldView architecture
 - **Scope:** EventRuntime, TeamRuntime, TaskScheduler, Worker read routes, browser synchronization
 
 > **2026-11-22 clarification:** ADR-0018 supersedes the read-triggered initialization/revalidation behavior in this ADR. Public event/team state reads now return 404 until a valid canonical publication exists and never enqueue provider work. Once published, the last-good state remains readable while refresh runs.
+
+> **2026-11-27 clarification:** Durable provider endpoint records and independently persisted analytics results remain the source of truth. EventState and TeamState are ephemeral normalized read projections; they are not persisted, are not readiness prerequisites, and are never generated as a side effect of bootstrap. Public reads construct the requested projection without storage writes, provider acquisition, task scheduling, or alarm changes. See ADR-0020.
 
 ## Context
 
