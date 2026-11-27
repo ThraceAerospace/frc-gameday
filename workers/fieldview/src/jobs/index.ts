@@ -62,6 +62,24 @@ interface AdminDiscoveryJobRecord {
   updated_at: number;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(items.length, Math.max(1, Math.floor(concurrency)));
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      results[index] = await worker(items[index]!, index);
+    }
+  }));
+  return results;
+}
+
 async function readJson<T>(bucket: DiscoveryServiceClient, key: string): Promise<T | null> {
   const object = await bucket.get(key);
   return object ? object.json<T>() : null;
@@ -944,10 +962,9 @@ export default {
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 25) || 25));
       const page = await store.list({ prefix: `admin/workflow-runs/index/${type}/`, limit: 1000 });
       const entries = page.objects.slice(-limit).reverse();
-      const runs = [];
-      for (const entry of entries) {
+      const runs = (await mapWithConcurrency(entries, 5, async (entry) => {
         const object = await store.get(entry.key);
-        if (!object) continue;
+        if (!object) return null;
         const indexRecord = await object.json<Record<string, unknown>>();
         const id = typeof indexRecord.workflow_id === "string" ? indexRecord.workflow_id : "";
         const recordObject = id ? await store.get(`admin/workflow-runs/${type}/${id}/record.json`) : null;
@@ -967,8 +984,8 @@ export default {
             record = { ...record, workflow_status: workflowStatus };
           } catch { /* Retain the durable run record if the Workflow status API is temporarily unavailable. */ }
         }
-        runs.push({ ...indexRecord, ...record });
-      }
+        return { ...indexRecord, ...record };
+      })).filter((run): run is Record<string, unknown> => run !== null);
       return Response.json({ type, runs, total: page.objects.length }, {
         headers: { "Cache-Control": "no-store" },
       });
