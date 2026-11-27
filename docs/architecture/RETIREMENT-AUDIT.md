@@ -17,6 +17,9 @@ This branch is a clean-slate replacement. None of its Cloudflare resources have 
 - Reduced SharedWorker responsibilities to canonical EventRuntime snapshot and analytics subscriptions.
 - Removed web-side TBA, Statbotics, and FRC Colors provider clients/caches; provider adapters live in shared provider packages and Worker acquisition.
 - Removed direct Redis, ioredis, `ws`, and Vercel Functions dependencies from the web workspace.
+- Removed the R2-shaped DiscoveryService object wrapper and generic `/get`, `/put`, `/list` HTTP record API; internal callers now use typed D1 JSON-record methods.
+- Removed browser IndexedDB persistence for normalized snapshots; the SharedWorker cache is memory-only.
+- Removed the per-event EventRuntime WebSocket route; the public `/stream` endpoint is Multiplexer-only.
 - Consolidated the undeployed Durable Object class migration into one initial migration.
 - Removed the root `.env.example` and changed local Worker development to use `workers/fieldview/.dev.vars`.
 
