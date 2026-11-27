@@ -1,5 +1,4 @@
 import type { FieldViewEvent } from "@fieldview/domain";
-import type { CanonicalEventSnapshotData } from "@/lib/events/workerRealtime";
 import type { UpcomingMatchAlert, TileSurfaceState } from "@/components/surface/TileSurfaceState";
 import type { EventViewCommandType, EventViewConfig, EventViewPresentation } from "@/components/eventview/EventViewConfig";
 import type { TileSurfaceActions, TileSurfaceController } from "@/components/surface/TileSurfaceActions";
