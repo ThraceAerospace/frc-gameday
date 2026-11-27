@@ -4,8 +4,9 @@ import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import { dispatchRuntime } from "../runtime/runtime-dispatch.ts";
 import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/runtime-refresh.ts";
 import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
+import { isValidEventLifecycleInput, lifecycleFor } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
+import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, selectInitialEventCandidates, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 import { AnalyticsExecutionRepository } from "./analytics-executions.ts";
@@ -238,6 +239,80 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     const registeredEvents = new Set(registeredEventKeys);
     const candidates = selectPollingCandidates(
       eventRegistrationCandidates, registeredEvents, scheduledAt, MAX_EVENT_CANDIDATES_PER_RUN, 0,
+    );
+
+    // First-time acquisition is separate from active-event cadence. It scans
+    // the canonical season directory but only dispatches a tiny rotating slice
+    // whose EventState publication is still missing.
+    const initialEventDirectory = await step.do("load-initial-event-acquisition-directory", async () => {
+      const directory = await readJson<{ year?: number; events?: TbaEvent[] }>(
+        store(), "discovery/events/" + discovery.year + ".json",
+      );
+      return directory?.year === discovery.year && Array.isArray(directory.events)
+        ? directory.events.filter((item) => item && typeof item.key === "string" &&
+          item.key.startsWith(String(discovery.year)) && isValidEventLifecycleInput(item))
+        : [];
+    });
+    const initialEventCandidates = selectInitialEventCandidates(
+      initialEventDirectory,
+      scheduledAt,
+      MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN,
+      Math.floor(scheduledAt / (5 * 60_000)),
+      new Set(candidates.map((item) => item.event.key)),
+    );
+    const initialEventAcquisitions = await step.do("acquire-missing-initial-event-states", async () =>
+      mapLimit(initialEventCandidates, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, async (item) => {
+        if (!await isRuntimeRegistered(store(), "event", item.key)) {
+          return { key: item.key, status: "unregistered" as const };
+        }
+        const readiness = await dispatchRuntime(this.env, "event", item.key, "readiness", {}, discovery.year);
+        if (!readiness.ok) throw new Error("Initial EventRuntime readiness failed for " + item.key +
+          " with HTTP " + readiness.status);
+        const body = await readiness.json() as { state_valid?: unknown; refresh_required?: unknown };
+        if (body.state_valid === true) return { key: item.key, status: "already_published" as const };
+        if (body.refresh_required !== true) {
+          return { key: item.key, status: "not_ready" as const };
+        }
+        const outcome = await dispatchRuntimeRefresh(this.env, { kind: "event", key: item.key, year: discovery.year });
+        if (!outcome.ok) throw new Error("Initial EventRuntime acquisition failed for " + item.key +
+          ": " + (outcome.error ?? "refresh failed"));
+        return { key: item.key, status: "acquired" as const };
+      }),
+    );
+
+    // Team profiles are acquired from the complete TBA team directory, not
+    // only from teams that have appeared on an active event roster. The same
+    // rotating budget makes this a gradual one-time fill rather than a burst.
+    const initialTeamDirectory = await step.do("load-initial-team-acquisition-directory", async () =>
+      readJson<unknown>(store(), "registry/teams/" + discovery.year + ".json"),
+    );
+    const allDiscoveredTeamKeys = Array.isArray(initialTeamDirectory)
+      ? [...new Set(initialTeamDirectory.filter((key): key is string =>
+          typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
+      : [];
+    const initialTeamCandidates = selectBudgetedKeys(
+      allDiscoveredTeamKeys,
+      MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
+      Math.floor(scheduledAt / (5 * 60_000)),
+    );
+    const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", async () =>
+      mapLimit(initialTeamCandidates, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, async (teamKey) => {
+        if (!await isRuntimeRegistered(store(), "team", teamKey)) {
+          return { key: teamKey, status: "unregistered" as const };
+        }
+        const readiness = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
+        if (!readiness.ok) throw new Error("Initial TeamRuntime readiness failed for " + teamKey +
+          " with HTTP " + readiness.status);
+        const body = await readiness.json() as { state_valid?: unknown; refresh_required?: unknown };
+        if (body.state_valid === true) return { key: teamKey, status: "already_published" as const };
+        if (body.refresh_required !== true) {
+          return { key: teamKey, status: "not_ready" as const };
+        }
+        const outcome = await dispatchRuntimeRefresh(this.env, { kind: "team", key: teamKey, year: discovery.year });
+        if (!outcome.ok) throw new Error("Initial TeamRuntime acquisition failed for " + teamKey +
+          ": " + (outcome.error ?? "refresh failed"));
+        return { key: teamKey, status: "acquired" as const };
+      }),
     );
 
     const results: PollingEventResult[] = [];
@@ -621,6 +696,14 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       week_projection_run_at: discovery.projectionRunAt,
       weekly_event_candidates_total: projectionEvents.length,
       eligible_events: allActiveEvents.length,
+      initial_event_candidates: initialEventCandidates.length,
+      initial_event_states_acquired: initialEventAcquisitions.filter((item) => item.status === "acquired").length,
+      initial_event_states_already_published: initialEventAcquisitions.filter((item) => item.status === "already_published").length,
+      initial_event_states_unregistered: initialEventAcquisitions.filter((item) => item.status === "unregistered").length,
+      initial_team_candidates: initialTeamCandidates.length,
+      initial_team_states_acquired: initialTeamAcquisitions.filter((item) => item.status === "acquired").length,
+      initial_team_states_already_published: initialTeamAcquisitions.filter((item) => item.status === "already_published").length,
+      initial_team_states_unregistered: initialTeamAcquisitions.filter((item) => item.status === "unregistered").length,
       event_registry_checks_processed: eventRegistrationCandidates.length,
       event_registry_checks_deferred_by_budget: Math.max(0, allActiveEvents.length - eventRegistrationCandidates.length),
       event_candidates_processed: candidates.length,

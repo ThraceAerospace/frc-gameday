@@ -86,3 +86,37 @@ test("event analytics recovery only dispatches pending, failed, or stale work wh
   assert.equal(isEventAnalyticsRecoveryDue("pending", "invalid", now), true,
     "malformed due metadata must not strand explicitly pending work");
 });
+
+
+test("initial event acquisition selects a bounded rotating slice of non-expired discovered events", async () => {
+  const { selectInitialEventCandidates, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN } =
+    await import("../../src/jobs/polling-policy.ts");
+  const discovered = [
+    { key: "2026expired", start_date: "2026-11-01", end_date: "2026-11-02", timezone: "UTC" },
+    { key: "2026upcoming", start_date: "2026-11-25", end_date: "2026-11-26", timezone: "UTC" },
+    { key: "2026active", start_date: "2026-11-20", end_date: "2026-11-27", timezone: "UTC" },
+    { key: "2026completed", start_date: "2026-11-20", end_date: "2026-11-24", timezone: "UTC" },
+    { key: "2026invalid", start_date: "2026-11-25", end_date: "2026-11-26", timezone: "Not/A_Timezone" },
+  ];
+  const current = Date.parse("2026-11-26T12:00:00Z");
+  const first = selectInitialEventCandidates(discovered, current, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, 0);
+  assert.equal(first.length, 2);
+  assert.equal(first.some((item) => item.key === "2026expired"), false);
+  assert.equal(first.some((item) => item.key === "2026invalid"), false);
+  const second = selectInitialEventCandidates(discovered, current, 2, 1);
+  assert.equal(second.some((item) => first.some((prior) => prior.key === item.key)), false,
+    "rotation advances without repeating the previous bounded slice");
+});
+
+test("initial event acquisition excludes entities already handled by active polling", async () => {
+  const { selectInitialEventCandidates } = await import("../../src/jobs/polling-policy.ts");
+  const discovered = [
+    { key: "2026a", start_date: "2026-11-20", end_date: "2026-11-27", timezone: "UTC" },
+    { key: "2026b", start_date: "2026-11-21", end_date: "2026-11-27", timezone: "UTC" },
+    { key: "2026c", start_date: "2026-11-22", end_date: "2026-11-27", timezone: "UTC" },
+  ];
+  const selected = selectInitialEventCandidates(
+    discovered, Date.parse("2026-11-26T12:00:00Z"), 2, 0, new Set(["2026a"]),
+  );
+  assert.deepEqual(selected.map((item) => item.key), ["2026b", "2026c"]);
+});

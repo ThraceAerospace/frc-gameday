@@ -3,6 +3,9 @@ import type { TbaEvent } from "./calendar.ts";
 
 /** Hard per-run limits: these cap dispatched work, not just concurrency. */
 export const MAX_EVENT_CANDIDATES_PER_RUN = 8;
+/** First-time provider acquisition is deliberately much smaller than recurring polling. */
+export const MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN = 2;
+export const MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN = 2;
 export const MAX_TEAM_READINESS_CHECKS_PER_RUN = 50;
 export const MAX_TEAM_REFRESH_COMMANDS_PER_RUN = 20;
 export const MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN = 50;
@@ -72,4 +75,25 @@ export function selectBudgetedItems<T>(
   const slot = Number.isSafeInteger(rotationSlot) ? rotationSlot : 0;
   const start = (((slot % items.length) * (count % items.length)) % items.length + items.length) % items.length;
   return Array.from({ length: count }, (_, index) => items[(start + index) % items.length]);
+}
+
+
+/**
+ * Select a rotating slice of discovered entities that have not passed their
+ * first publication check elsewhere in this coordinator run. Expired events
+ * are excluded; upcoming, active, and recently completed events remain eligible.
+ */
+export function selectInitialEventCandidates(
+  events: TbaEvent[],
+  now: number,
+  limit = MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN,
+  rotationSlot = 0,
+  excludedKeys: ReadonlySet<string> = new Set(),
+): TbaEvent[] {
+  const eligible = events
+    .filter((event) => event && typeof event.key === "string" &&
+      !excludedKeys.has(event.key) && isValidEventLifecycleInput(event) &&
+      lifecycleFor(event, now).lifecycle !== "expired")
+    .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.key.localeCompare(b.key));
+  return selectBudgetedItems(eligible, limit, rotationSlot);
 }
