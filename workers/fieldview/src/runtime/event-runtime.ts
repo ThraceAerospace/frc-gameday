@@ -529,11 +529,32 @@ export class EventRuntime extends DurableObjectBase {
         ? await this.publishEventState()
         : currentPublication;
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      return Response.json({
+      const endpointResults = results.map((result) => {
+        const state = entries.get(endpointStorageKey(result.endpoint)) as
+          (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
+        return {
+          ...result,
+          status: state?.status ?? "unknown",
+          http_status: state?.lastHttpStatus ?? null,
+          last_error: state?.lastError ?? null,
+        };
+      });
+      // A successful HTTP response from a provider is not the same as a
+      // successful refresh operation. Report retryable acquisition failures
+      // to the queue consumer while retaining the last-good publication.
+      // Provider 404s remain unavailable (not retryable) because many event
+      // resources legitimately do not exist until later in the season.
+      const failedEndpoints = endpointResults.filter((result) => Boolean(result.last_error) || result.status === "failed");
+      const retryable = failedEndpoints.length > 0;
+      const responseBody = {
         event_key: this.eventKey,
         requested: refreshEndpoints.length,
         attempted: results.length,
-        results,
+        succeeded: results.filter((result) => result.success).length,
+        failed: failedEndpoints.length,
+        retryable,
+        results: endpointResults,
+        failed_endpoints: failedEndpoints.map((result) => result.endpoint),
         ...(analyticsAffectedTeamKeys === undefined ? {} : { affected_team_keys: analyticsAffectedTeamKeys }),
         publication_status: publication.status,
         state: [...entries.values()].map((state) => ({
@@ -541,7 +562,19 @@ export class EventRuntime extends DurableObjectBase {
           fetched_at: state.lastFetchedAt, attempted_at: state.lastAttemptAt,
           last_error: (state as EndpointState<unknown> & { lastError?: string | null }).lastError ?? null,
         })),
-      }, { headers: { "Cache-Control": "no-store" } });
+      };
+      console.info("[FV][EventRuntime][Refresh] " + JSON.stringify({
+        event_key: this.eventKey,
+        requested: refreshEndpoints.length,
+        succeeded: responseBody.succeeded,
+        failed: responseBody.failed,
+        retryable,
+        publication_status: publication.status,
+      }));
+      return Response.json(responseBody, {
+        status: retryable ? 503 : 200,
+        headers: { "Cache-Control": "no-store", ...(retryable ? { "Retry-After": "30" } : {}) },
+      });
     }
 
     if (request.method === "POST" && url.pathname === "/participants") {
@@ -1524,7 +1557,7 @@ export class EventRuntime extends DurableObjectBase {
       | { status: "modified"; data: unknown; etag: string | null; expiresAt: number | null }
       | { status: "not-modified"; expiresAt: number | null }
       | { status: "unavailable"; httpStatus: number }
-      | { status: "failed"; reason: string };
+      | { status: "failed"; reason: string; httpStatus?: number };
 
     try {
       const response = isStatboticsEndpoint
@@ -1543,6 +1576,7 @@ export class EventRuntime extends DurableObjectBase {
       } else if (!response.ok) {
         responseState = {
           status: "failed",
+          httpStatus: response.status,
           reason: `HTTP ${response.status}${response.statusText ? " " + response.statusText : ""} from ${response.url ? (() => { const url = new URL(response.url); return url.origin + url.pathname; })() : "unknown URL"}`,
         };
       } else {
@@ -1585,7 +1619,8 @@ export class EventRuntime extends DurableObjectBase {
         ...next,
         lastError: responseState.status === "failed" ? responseState.reason : null,
         lastHttpStatus: responseState.status === "modified" ? 200
-          : responseState.status === "unavailable" ? responseState.httpStatus : null,
+          : responseState.status === "unavailable" ? responseState.httpStatus
+            : responseState.status === "failed" ? responseState.httpStatus ?? null : null,
       };
       await transaction.put(key, nextWithDiagnostic);
       if (next.revision !== latest.revision) {
