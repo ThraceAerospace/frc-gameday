@@ -6,7 +6,7 @@
 
 ## Authoritative storage
 
-EventRuntime and TeamRuntime persist provider endpoint records, including payloads, validators, freshness metadata, status, and revisions. EventState and TeamState are normalized read projections. Optional matching projections may be used as caches, but endpoint records are always authoritative.
+EventRuntime and TeamRuntime persist provider endpoint records, including payloads, validators, freshness metadata, status, and revisions. EventState and TeamState are normalized read projections. Only disposable in-memory projections are cached; normalized projections are not persisted. Endpoint records are always authoritative.
 
 ## Read-only operations
 
