@@ -6,8 +6,6 @@ import { createDiscoveryServiceClient } from "./discovery-client.ts";
 import { acquireRuntimeBootstrap } from "./runtime-bootstrap-acquisition.ts";
 
 type RefreshKind = "event" | "team";
-type RefreshTask = { kind: RefreshKind; key: string; year: number; workflow_id: string; workflow_type: string };
-export type RefreshMessage = { version: 1; tasks: RefreshTask[] };
 
 type SeasonWorkflowInput = { year: number; requestedAt?: number };
 type ResolverInput = { requestedAt?: number };
@@ -18,12 +16,6 @@ export interface SeasonEnvironment extends RuntimeEnvironment {
   TEAM_SEASON_READINESS: Workflow;
   SEASON_STATUS_RESOLVER: Workflow;
 }
-interface QueueMessageLike {
-  body: RefreshMessage;
-  ack(): void;
-  retry(options?: { delaySeconds?: number }): void;
-}
-interface QueueBatchLike { messages: QueueMessageLike[]; }
 
 const validYear = (year: unknown): year is number =>
   Number.isInteger(year) && Number(year) >= 1992 && Number(year) <= 2200;
@@ -248,104 +240,5 @@ export class SeasonStatusResolverWorkflow extends WorkflowEntrypoint<SeasonEnvir
       return record;
     });
     return record;
-  }
-}
-
-export async function consumeSeasonRefreshQueue(batch: QueueBatchLike, env: SeasonEnvironment): Promise<void> {
-  // A consumer invocation may contain multiple queue messages. Track stable
-  // entity-season task identities across the whole invocation so repeated
-  // entity-season work is visible in logs without suppressing readiness checks.
-  const seenTaskIds = new Set<string>();
-
-  for (let messageIndex = 0; messageIndex < batch.messages.length; messageIndex += 1) {
-    const message = batch.messages[messageIndex]!;
-    const payload = message.body;
-    if (!payload || payload.version !== 1 || !Array.isArray(payload.tasks) || payload.tasks.length > 25) {
-      console.warn("[season-refresh-queue-invalid-message]", JSON.stringify({ message_index: messageIndex }));
-      message.ack();
-      continue;
-    }
-
-    const duplicateTaskIds = new Set<string>();
-    const outcomes = await mapWithConcurrency(payload.tasks, 4, async (task) => {
-      if (!validYear(task.year) || (task.kind !== "event" && task.kind !== "team") ||
-          (task.kind === "team" ? !validTeam(task.key) : !validEvent(task.key))) {
-        return { task, task_id: null, outcome: "invalid" as const };
-      }
-      const taskId = task.kind + ":" + task.year + ":" + task.key;
-      const duplicate = seenTaskIds.has(taskId);
-      if (duplicate) duplicateTaskIds.add(taskId);
-      seenTaskIds.add(taskId);
-
-      try {
-        const readiness = await dispatchRuntime(env, task.kind, task.key, "readiness", {}, task.year);
-        if (readiness.status === 429 || readiness.status >= 500) {
-          return { task, task_id: taskId, duplicate, outcome: "retry" as const, detail: "readiness_http_" + readiness.status };
-        }
-        if (!readiness.ok) {
-          return { task, task_id: taskId, duplicate, outcome: "skipped" as const, detail: "readiness_http_" + readiness.status };
-        }
-        const status = await readiness.json() as { state_valid?: boolean; refresh_required?: boolean };
-        if (status.state_valid === true && status.refresh_required !== true) {
-          return { task, task_id: taskId, duplicate, outcome: "skipped" as const, detail: "already_ready" };
-        }
-        const refresh = await dispatchRuntime(env, task.kind, task.key, "refresh", {}, task.year);
-        if (refresh.status === 429 || refresh.status >= 500) {
-          return { task, task_id: taskId, duplicate, outcome: "retry" as const, detail: "refresh_http_" + refresh.status };
-        }
-        return refresh.ok
-          ? { task, task_id: taskId, duplicate, outcome: "dispatched" as const }
-          : { task, task_id: taskId, duplicate, outcome: "skipped" as const, detail: "refresh_http_" + refresh.status };
-      } catch (error) {
-        return {
-          task,
-          task_id: taskId,
-          duplicate,
-          outcome: "retry" as const,
-          detail: (error instanceof Error ? error.message : String(error)).slice(0, 240),
-        };
-      }
-    });
-
-    const count = (outcome: typeof outcomes[number]["outcome"]) =>
-      outcomes.filter((item) => item.outcome === outcome).length;
-    const workflowIds = [...new Set(payload.tasks.map((task) => task.workflow_id).filter((id): id is string => typeof id === "string"))];
-    const years = [...new Set(payload.tasks.map((task) => task.year))];
-    const kinds = [...new Set(payload.tasks.map((task) => task.kind))];
-
-    // Per-task structured logs make repeated entity-season dispatches
-    // attributable to their originating Workflow without adding storage writes.
-    for (const item of outcomes) {
-      console.log("[season-refresh-task]", JSON.stringify({
-        task_id: item.task_id,
-        kind: item.task.kind,
-        key: item.task.key,
-        year: item.task.year,
-        workflow_id: item.task.workflow_id ?? null,
-        workflow_type: item.task.workflow_type ?? null,
-        duplicate: "duplicate" in item ? item.duplicate : false,
-        outcome: item.outcome,
-        ...( "detail" in item ? { detail: item.detail } : {}),
-      }));
-    }
-
-    const retry = count("retry") > 0;
-    console.log("[season-refresh-queue]", JSON.stringify({
-      message_index: messageIndex,
-      workflow_ids: workflowIds,
-      years,
-      kinds,
-      tasks: payload.tasks.length,
-      unique_task_ids_in_message: new Set(outcomes.map((item) => item.task_id).filter(Boolean)).size,
-      duplicate_tasks: duplicateTaskIds.size,
-      dispatched: count("dispatched"),
-      skipped: count("skipped"),
-      invalid: count("invalid"),
-      retry: count("retry"),
-      concurrency: Math.min(4, payload.tasks.length),
-      outcomes: outcomes.map((item) => ({ task_id: item.task_id, duplicate: "duplicate" in item ? item.duplicate : false, outcome: item.outcome })),
-    }));
-    if (retry) message.retry({ delaySeconds: 30 });
-    else message.ack();
   }
 }
