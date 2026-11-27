@@ -147,8 +147,6 @@ export class TeamRuntime extends DurableObjectBase {
               this.publishedSnapshots.set(year, publication);
             }
           }
-          // Legacy duplicate raw-snapshot keys remain untouched during activation.
-          // Persistent cleanup requires an explicit migration operation.
         })
       : Promise.resolve();
   }
@@ -397,29 +395,10 @@ export class TeamRuntime extends DurableObjectBase {
       const eventKey = url.searchParams.get("event_key") ?? "";
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
       const stateKey = TEAM_EVENT_STATE_PREFIX + eventKey;
-      const storedState = await this.storage.get<FieldViewTeamEventState & {
-        team?: import("../../../../packages/domain/src/team.ts").FieldViewTeam | null;
-        event_team?: import("../../../../packages/domain/src/event.ts").FieldViewEventTeam | null;
-        matches?: import("../../../../packages/domain/src/match.ts").FieldViewMatch[] | null;
-      }>(stateKey);
+      const storedState = await this.storage.get<FieldViewTeamEventState>(stateKey);
       if (!storedState) return Response.json({ error: "TeamEventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
       const inputs = await this.storage.get<{ event_source_revision: number; team_source_revision: number; comparison_input_updated_at: number; publication_status?: "pending" | "published" }>(stateKey + ":inputs");
-      // Lazy, owner-local migration of old records that embedded foreign
-      // EventRuntime data. This preserves the logical revision while replacing
-      // copied event/team/match records with stable references.
-      const hasLegacyEmbeddedRecords = "team" in storedState || "event_team" in storedState || "matches" in storedState;
-      const state = hasLegacyEmbeddedRecords ? normalizeFieldViewTeamEventState({
-        event_key: eventKey as FieldViewTeamEventState["event_key"],
-        team_key: this.teamKey as FieldViewTeamEventState["team_key"],
-        sources: storedState.sources,
-        ...(storedState.team === undefined ? {} : { team: storedState.team }),
-        ...(storedState.event_team === undefined ? {} : { event_team: storedState.event_team }),
-        ...(storedState.matches === undefined ? {} : { matches: storedState.matches }),
-        ...(storedState.analytics === undefined ? {} : { analytics: storedState.analytics }),
-        event_source_revision: inputs?.event_source_revision ?? null,
-      }) : storedState;
-      // Legacy compatibility is normalized in the response only. Public reads never migrate or rewrite storage.
-      return Response.json(state, {
+      return Response.json(storedState, {
         headers: {
           "X-FieldView-Team-Event-Revision": String(await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + eventKey) ?? 0),
           "X-FieldView-Analytics-Publication-Status": inputs?.publication_status ?? "published",
@@ -833,7 +812,7 @@ export class TeamRuntime extends DurableObjectBase {
         team_event_revision: await this.storage.get<number>(TEAM_EVENT_REVISION_PREFIX + event_key) ?? 0,
       })));
       return Response.json({
-        endpoint, queued: false, attempted: true, ...result,
+        endpoint, attempted: true, ...result,
         team_key: this.teamKey, year, team_state_revision: teamStateRevision,
         affected_events: affectedEvents, snapshot,
       }, { headers: { "Cache-Control": "no-store" } });
@@ -1029,7 +1008,6 @@ export class TeamRuntime extends DurableObjectBase {
       ] : null),
     );
     const publicationKey = `team-state:${year}:publication`;
-    const legacyStateKey = `team-state:${year}`;
     const inputs = await this.storage.transaction(async (tx) => ({
       states: await Promise.all(resources.map(({ endpoint }) =>
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
@@ -1062,14 +1040,6 @@ export class TeamRuntime extends DurableObjectBase {
       )));
       return Response.json(cached.state, {
         headers: { ...responseHeaders, "X-FieldView-Publication-Status": cachedProjectionStale ? "stale" : "available" },
-      });
-    }
-    // A persisted materialized TeamState remains a useful stale fallback when
-    // endpoint records have not been migrated yet. It is never required.
-    if (cached && inputs.states.every((state) => !state)) {
-      this.publishedSnapshots.set(year, cached);
-      return Response.json(cached.state, {
-        headers: { ...responseHeaders, "X-FieldView-Publication-Status": "stale" },
       });
     }
     // A failed refresh retains the last-good endpoint data in storage. Rebuild
