@@ -110,7 +110,7 @@ export default async function TeamPage({
   const discoveredTeam = discoveredTeams?.find((candidate) => candidate.key === teamKey) ?? null;
   const team: TeamData | null = initialCanonical?.snapshot.team ?? (discoveredTeam as TeamData | null);
   if (!team) {
-    console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "team", entity_key: teamKey, reason: "team_and_snapshot_unavailable", year: currentYear }));
+    console.warn("[FV][EntityUnavailable]", JSON.stringify({ response_state: "unavailable", entity_kind: "team", entity_key: teamKey, year: currentYear, reason_codes: ["team_and_snapshot_unavailable"] }));
     notFound();
   }
 
@@ -177,7 +177,7 @@ export default async function TeamPage({
     eventSections.length < teamEvents.length ? "team_event_snapshots_missing" : null,
     !matchDataComplete ? "team_match_data_incomplete" : null,
   ].filter((reason): reason is string => reason !== null);
-  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "team", entity_key: teamKey, reasons: incompleteReasons, year }));
+  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ response_state: "partial", entity_kind: "team", entity_key: teamKey, year, served: true, served_source: !canonicalTeam?.snapshot.team ? (!initialCanonical?.snapshot.team ? "tba_team_discovery" : "current_season_team_profile") : "fieldview_team_snapshot", reason_codes: incompleteReasons }));
   const completedMatches = eventSections.flatMap(({ event, matches }) =>
     (matches ?? [])
       .filter((match) => (match.alliances?.red?.score ?? -1) >= 0 && (match.alliances?.blue?.score ?? -1) >= 0)
