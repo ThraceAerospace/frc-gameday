@@ -200,8 +200,8 @@ export class TeamRuntime extends DurableObjectBase {
     const analyticsSeasonInputPrepare = request.method === "POST" && url.pathname === "/analytics-season-input/prepare";
     if (!admin && !publicRead && !publicEventStateRead && !publicSeasonAnalyticsRead) return Response.json({ error: "Unauthorized" }, { status: 401 });
     // Public reads must not bind identity or perform migration cleanup writes.
-    // Entity identity is established by scheduler/admin initialization before a
-    // runtime is exposed to public readers.
+    // Entity identity is established by the Worker registration workflow or an
+    // explicit administrator seed operation before public readers are admitted.
     const diagnosticsRead = request.method === "GET" && url.pathname === "/state";
     if (publicRead || publicSeasonAnalyticsRead || publicEventStateRead || diagnosticsRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead) {
       if (diagnosticsRead && !isRuntimeAdminAuthorized(request, this.env)) {

@@ -999,7 +999,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
 
     if (url.pathname === "/stream" && request.method === "GET" && env.MULTIPLEXER) {
       const stub = env.MULTIPLEXER.get(env.MULTIPLEXER.idFromName("shared"));
-      return stub.fetch(new Request("https://fieldview-multiplexer/stream", { method: "GET", headers: request.headers }));
+      return stub.fetch(new Request("https://fieldview-multiplexer/stream" + url.search, { method: "GET", headers: request.headers }));
     }
 
     if (url.pathname === "/health") {

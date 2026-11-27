@@ -725,6 +725,15 @@ test("TeamRuntime readiness inspects provider resources; refresh does not requir
   assert.equal(storage.values.has("team-state:" + currentYear + ":publication"), false);
   assert.equal(storage.values.has("team-state:" + currentYear), false);
   assert.equal(storage.values.has("team-state:" + historicalYear), false);
+
+  const refreshOnlyStorage = new MemoryStorage();
+  const refreshOnlyRuntime = new TeamRuntime({ storage: refreshOnlyStorage }, env(async () => Response.json([])), teamKey);
+  const refreshOnly = await refreshOnlyRuntime.fetch(new Request("https://team-runtime/refresh?year=" + currentYear, {
+    method: "POST", headers: { Authorization: "Bearer admin", "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(refreshOnly.status, 200);
+  assert.equal(refreshOnlyRuntime.hotSnapshots.size, 0,
+    "provider acquisition must not build a TeamState before a snapshot read");
 });
 
 

@@ -1,7 +1,7 @@
 # Compatibility Retirement Audit
 
 **Branch:** `fieldview-architecture-migration`  
-**Status:** Compatibility retirement and frontend contract repair in progress; final source scan and full integration validation remain.
+**Status:** Compatibility retirement and on-demand state-generation realignment in progress; final source scan and full integration validation remain.
 
 ## Owner direction
 
@@ -21,6 +21,7 @@ This branch is a clean-slate replacement. None of its Cloudflare resources have 
 - Removed direct Redis, ioredis, `ws`, and Vercel Functions dependencies from the web workspace.
 - Removed the R2-shaped DiscoveryService object wrapper and generic `/get`, `/put`, `/list` HTTP record API; internal callers now use typed D1 JSON-record methods.
 - Removed browser IndexedDB persistence for normalized snapshots; the SharedWorker cache is memory-only.
+- Provider refresh and webhook paths now persist endpoint records and publish revision-only invalidations; canonical `EventState` and `TeamState` are assembled on explicit snapshot/analytics reads, not as refresh side effects.
 - Removed the per-event EventRuntime WebSocket route; the public `/stream` endpoint is Multiplexer-only.
 - Consolidated the undeployed Durable Object class migration into one initial migration.
 - Removed the root `.env.example` and changed local Worker development to use `workers/fieldview/.dev.vars`.
