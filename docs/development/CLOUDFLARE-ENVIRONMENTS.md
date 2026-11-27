@@ -1,88 +1,68 @@
 # Cloudflare Worker deployment and Previews
 
-## Accepted deployment topology
+## Deployment topology
 
-FieldView uses **one Cloudflare Worker** named `runtime`. The name is environment-neutral; do not create separate Worker names for preview, preproduction, staging, or production.
+FieldView deploys one environment-neutral Cloudflare Worker named `runtime`. Do not create separate Worker identities for preview, testing, preproduction, staging, or production.
 
-| Deployment | Worker identity | Configuration |
+| Use | Worker | Configuration |
 |---|---|---|
 | Production | `runtime` | Top-level settings in `workers/fieldview/wrangler.toml` |
-| Branch / pull-request Preview | Same `runtime` Worker | The `[previews]` settings in the same Wrangler file |
+| Branch / pull-request validation | Same `runtime` identity | Cloudflare Workers Preview URLs and the `[previews]` configuration in the same file |
+| Local development | Wrangler local runtime | `workers/fieldview/.dev.vars` |
 
-Production's stable `workers.dev` URL is `runtime.frc-fieldview.workers.dev`. Preview URLs are enabled in Wrangler and use Cloudflare's branch-preview hostname format: `<preview-name>-runtime.frc-fieldview.workers.dev`. The preview name defaults to the current Git branch; pass `--name` to choose a stable alias such as `testing`. A custom preview domain is a separate Cloudflare domain configuration and must be configured on this same Worker, not by creating another Worker.
+Wrangler named environments are not used. Production deployment is a deliberate operator action, not an automatic CI side effect.
 
-Cloudflare Workers Previews automatically provide a separate Durable Object namespace and storage for each Preview. The four Durable Object classes and their migration history remain declared at the top level; the same `env` bindings are repeated under `[previews.durable_objects]` so Preview code receives its isolated namespaces.
+## Resource configuration
 
-## Preview limitations and isolation
+The single Wrangler file declares the Worker entrypoint, static admin assets, Cron triggers, D1 and KV bindings, Durable Object classes, Workflow bindings, and Preview bindings.
 
-- Preview variables are declared under `[previews.vars]`; they do not inherit production variables. Keep preview values explicit and safe.
-- Preview secrets are configured through Cloudflare's Preview Base settings (or per-Preview secret commands), never committed to Wrangler configuration or source control.
-- **Do not bind Preview requests to production Workflows.** Cloudflare Preview Workflow bindings target existing Workflow resources and use those Workflows' deployed code, bindings, and instances; they are not automatically isolated per Preview. The current configuration therefore does not expose Workflow bindings to Previews. Workflow-dependent admin operations are not available in branch Previews until a dedicated non-production Workflow strategy is implemented.
-- Production Workflow bindings remain at the top level.
-- Preview URLs are public unless Cloudflare Access is configured. Protect them before sharing private or administrative functionality.
-- The existing prototype `RUNTIME_ADMIN_TOKEN` is not a production authorization design and must not be deployed as a Production secret.
+The current runtime Durable Object classes are EventRuntime, TeamRuntime, Multiplexer, and RemoteSessionRuntime. EventRuntime and TeamRuntime own canonical provider endpoint records and scope-local state. Multiplexer owns the public realtime stream. RemoteSessionRuntime owns remote display signaling.
 
-## Commands
+D1 owns discovery and operational/system records through typed repositories. KV is limited to lightweight, non-authoritative projections and canonical pointers. Durable Object SQLite is the canonical store for runtime-owned provider endpoint data. There is no R2 binding, Redis service, or Cloudflare Queue refresh path.
 
-From the repository root:
+## Preview isolation and limitations
 
-```bash
-# Local development; no Wrangler named environment
+- Preview variables and resource bindings are declared explicitly; do not assume they inherit production configuration.
+- Preview Durable Object namespaces/storage are isolated by Cloudflare for each Preview.
+- Preview D1 and KV bindings must point to non-production resources.
+- Cloudflare Workers Previews do not provide isolated Workflow instances through the current configuration. Do not bind Preview traffic to production Workflows. Workflow-dependent operations must be tested locally or through an explicitly provisioned non-production Workflow environment before relying on them for integration sign-off.
+- Preview URLs may be publicly reachable. Apply the appropriate access controls before sharing administrative functionality.
+- Production secrets are configured in Cloudflare and are never committed to source control.
+
+## Local configuration
+
+The Worker reads local variables and secrets from one ignored file:
+
+```sh
+cp workers/fieldview/.dev.vars.example workers/fieldview/.dev.vars
 npm run dev:worker
-
-# Create or update a Preview for the current Git branch
-npx --yes wrangler@^4.135.0 preview
-
-# Deploy the production Worker (manual operator action only)
-npx --yes wrangler@^4.135.0 deploy --config workers/fieldview/wrangler.toml
 ```
 
-Workers Previews require Wrangler 4.135.0 or later. Use the repository's configured Wrangler file for both production and Preview operations. Do not use `--env`; Wrangler named environments create separate Worker identities and are not part of this architecture.
+Frontend environment variables remain in the Vercel project configuration. Do not source frontend environment files into the Worker or duplicate server secrets into browser-visible variables.
 
-## Local secrets
+## Operator commands
 
-Keep Worker and frontend environment configuration separate.
+Use the Wrangler version and scripts pinned by the repository. The canonical config path is always `workers/fieldview/wrangler.toml`.
 
-- The Worker uses one local file: `workers/fieldview/.dev.vars`. It is Git-ignored and Wrangler loads it automatically for local development.
-- Do not source the frontend `.env` or Vercel environment into the Worker process.
-- Frontend/Vercel environment variables remain managed independently by the frontend workflow; they are not copied into `.dev.vars`.
-- Cloudflare Production and Preview secrets are configured separately in Cloudflare and are never committed to source control.
+```sh
+# Local Worker
+npm run dev:worker
 
-## Current repository state
+# Preview for the current branch
+npx wrangler preview --config workers/fieldview/wrangler.toml
 
-Runtime and Jobs are separated as `workers/fieldview/src/runtime` and `workers/fieldview/src/jobs`, with corresponding tests under `workers/fieldview/test`. They are modules in one Worker project, composed by `workers/fieldview/src/index.ts`, the single deployment entrypoint. Jobs dispatch uses an in-process callback; no Runtime-to-Jobs, Jobs-to-Runtime, or self-service Worker service bindings are used.
+# Production deployment — explicit operator action only
+npx wrangler deploy --config workers/fieldview/wrangler.toml
+```
 
-## Bound storage resources
+Do not add `--env` or a second Wrangler configuration. Verify the selected account, resource bindings, secrets, migrations, and target before any deployment command.
 
-The current `workers/fieldview/wrangler.toml` resource mapping is intentional:
-
-| Binding | Production | Branch / pull-request Previews | Ownership and isolation |
-|---|---|---|---|
-| `DB` | `fieldview-d1-prod` (`bd7852b3-7814-4c3f-9ce8-f1c244524843`) | `fieldview-d1-test` (`6862b62b-73a0-43a5-8b2f-5ccd1e8bfc7e`) | Separate physical databases. All Preview branches currently share the test database. Discovery and System Records are separate logical schemas/repositories in each database. |
-| `KV_BINDING` | `fieldview-kv-prod` (`c067dfcaa3a345b0b43f035a992b4b30`) | `fieldview-kv-test` (`19ef5d5221654ab4bac0c8118c35ad8b`) | Separate namespaces. Both may contain projections derived from the same upstream TBA facts, but Preview mutations cannot affect Production. |
-
-TBA remains the upstream source of truth; neither KV namespace is authoritative. KV contains FieldView-managed projections/cached data and remains mutable/eventually consistent. Production and Preview may independently build equivalent projections from TBA. Do not assume the two namespaces are transactionally synchronized or copy test-only values into Production.
-
-The Preview D1 database is a shared test target across branches, not a database per Preview. Do not apply migrations to either database until the migration set, schema ownership, and target database have been reviewed. No schema migrations are currently applied by this configuration.
-
-The single Wrangler configuration declares the four Durable Object classes (EventRuntime, TeamRuntime, Multiplexer, and transitional DiscoveryStore) and the four production Workflows (DailyEventReadinessWorkflow, DailyTeamReadinessWorkflow, CoverageAuditWorkflow, and RuntimeAdminWorkflow). Durable Object classes and migrations are shared in configuration but Cloudflare provisions isolated namespace/storage for each Preview. Preview Workflow bindings are intentionally omitted for the isolation reason above.
-
-The current DiscoveryStore Durable Object remains transitional until Discovery and System Records D1 repositories are implemented and cut over. Do not remove its binding until every key/caller has been classified, D1 repositories and migrations are implemented, cutover/rollback is verified, and old operational responsibilities are removed. Production and Preview data must never be shared accidentally.
-
-## Deployment controls
+## Cutover safeguards
 
 - Do not deploy automatically from CI.
-- The user runs Wrangler commands manually and performs all Cloudflare deployments.
-- Do not modify Cloudflare resources, secrets, routes, or Vercel project settings from ChatGPT.
-- Do not cut over Production until Previews/local validation and the production administrator authorization design have replaced the prototype `RUNTIME_ADMIN_TOKEN` bearer token.
-- Keep secrets out of source control and chat output.
+- Do not point Preview D1/KV bindings at production resources.
+- Do not bind Preview requests to production Workflows.
+- Do not apply D1 migrations or mutate remote resources without explicit cutover authorization.
+- Do not deploy production until the integration gate and production administrator authorization requirements are satisfied.
 
-## Storage-domain migration
-
-The accepted 2026-11-24 decision defines three storage domains:
-
-- Discovery: D1 is authoritative for event/team directories, current-season metadata, and discovery refresh records. KV may serve lightweight read-heavy projections such as `events-this-week`.
-- System Records: D1 stores Workflow execution/progress/outcomes, runtime registration, administrative actions, and operational history in a schema/repository separate from Discovery.
-- Runtime State: EventRuntime and TeamRuntime Durable Objects retain canonical entity state, provider validators, and reconciliation state; Multiplexer retains subscription coordination.
-
-The current Wrangler configuration still binds the transitional DiscoveryStore Durable Object because its records and callers have not yet been migrated. Previews isolate this Durable Object's namespace automatically. Do not remove that binding until the D1 migration and cutover are complete.
+See [the production integration and cutover plan](../architecture/MIGRATION-PLAN.md) for the release gate.
