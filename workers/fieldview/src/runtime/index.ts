@@ -295,7 +295,7 @@ async function adminProxy(request: Request, env: RuntimeEnvironment, context: { 
  if(request.method==="POST"){
   const body:unknown=await request.json().catch(()=>null);if(!isRecord(body))return Response.json({error:"Invalid operation payload"},{status:400});
   const type=body.workflowType;
-  const target=type==="events-this-week"?"/internal/admin/events-this-week/refresh":type==="event-readiness"?"/internal/admin/daily-event-readiness":type==="team-readiness"?"/internal/admin/daily-team-readiness":"/internal/admin/operations";
+  const target=type==="events-this-week"?"/internal/admin/events-this-week/refresh":type==="event-readiness"?"/internal/admin/event-season-readiness":type==="team-readiness"?"/internal/admin/team-season-readiness":type==="season-status-resolver"?"/internal/admin/season-status-resolver":"/internal/admin/operations";
   const headers=new Headers(request.headers);if(target.endsWith("/operations"))headers.set("Content-Type","application/json");
   return runtimeFetch(new Request(new URL(target,url.origin),{method:"POST",headers,...(target.endsWith("/operations")?{body:JSON.stringify(body)}:{})}),env,context);
  }
@@ -457,19 +457,27 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
       }));
     }
 
-    if (url.pathname === "/internal/admin/daily-event-readiness" && request.method === "POST") {
+    if (url.pathname === "/internal/admin/event-season-readiness" && request.method === "POST") {
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/daily-event-readiness", {
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/event-season-readiness", {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
     }
 
-    if (url.pathname === "/internal/admin/daily-team-readiness" && request.method === "POST") {
+    if (url.pathname === "/internal/admin/season-status-resolver" && request.method === "POST") {
       if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
       if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
-      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/daily-team-readiness", {
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/season-status-resolver", {
+        method: "POST", headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
+      }));
+    }
+
+    if (url.pathname === "/internal/admin/team-season-readiness" && request.method === "POST") {
+      if (!(await isCloudflareAccessAdmin(request, env))) return Response.json({ error: "Unauthorized" }, { status: 401 });
+      if (!env.JOBS_REQUEST) return Response.json({ error: "Jobs module is unavailable" }, { status: 503 });
+      return jobsRequest(env, new Request("https://runtime-workflows/internal/admin/team-season-readiness", {
         method: "POST",
         headers: { Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN },
       }));
