@@ -10,6 +10,7 @@ import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, select
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 import { AnalyticsExecutionRepository } from "./analytics-executions.ts";
+import { acquireRuntimeBootstrap } from "./runtime-bootstrap-acquisition.ts";
 
 type PollingEnvironment = RuntimeEnvironment & { EVENT_ANALYTICS_WORKFLOW?: Workflow };
 
@@ -273,10 +274,15 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         if (body.refresh_required !== true) {
           return { key: item.key, status: "not_ready" as const };
         }
-        const outcome = await dispatchRuntimeRefresh(this.env, { kind: "event", key: item.key, year: discovery.year });
-        if (!outcome.ok) throw new Error("Initial EventRuntime acquisition failed for " + item.key +
-          ": " + (outcome.error ?? "refresh failed"));
-        return { key: item.key, status: "acquired" as const };
+        const bootstrapId = "poll:" + scheduledAt + ":event:" + item.key;
+        const bundle = await acquireRuntimeBootstrap(this.env, "event", item.key, discovery.year, bootstrapId);
+        const outcome = await dispatchRuntime(this.env, "event", item.key, "bootstrap",
+          bundle as unknown as Record<string, unknown>, discovery.year);
+        if (!outcome.ok) throw new Error("Initial EventRuntime bootstrap failed for " + item.key +
+          " with HTTP " + outcome.status + ": " + (await outcome.text().catch(() => "")).slice(0, 180));
+        const receipt = await outcome.json() as { accepted?: unknown; publication_status?: unknown };
+        if (receipt.accepted !== true) throw new Error("EventRuntime did not confirm bootstrap acceptance for " + item.key);
+        return { key: item.key, status: "acquired" as const, publication_status: receipt.publication_status ?? "unknown" };
       }),
     );
 
@@ -435,10 +441,15 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
         if (body.refresh_required !== true) {
           return { key: teamKey, status: "not_ready" as const };
         }
-        const outcome = await dispatchRuntimeRefresh(this.env, { kind: "team", key: teamKey, year: discovery.year });
-        if (!outcome.ok) throw new Error("Initial TeamRuntime acquisition failed for " + teamKey +
-          ": " + (outcome.error ?? "refresh failed"));
-        return { key: teamKey, status: "acquired" as const };
+        const bootstrapId = "poll:" + scheduledAt + ":team:" + teamKey;
+        const bundle = await acquireRuntimeBootstrap(this.env, "team", teamKey, discovery.year, bootstrapId);
+        const outcome = await dispatchRuntime(this.env, "team", teamKey, "bootstrap",
+          bundle as unknown as Record<string, unknown>, discovery.year);
+        if (!outcome.ok) throw new Error("Initial TeamRuntime bootstrap failed for " + teamKey +
+          " with HTTP " + outcome.status + ": " + (await outcome.text().catch(() => "")).slice(0, 180));
+        const receipt = await outcome.json() as { accepted?: unknown; publication_status?: unknown };
+        if (receipt.accepted !== true) throw new Error("TeamRuntime did not confirm bootstrap acceptance for " + teamKey);
+        return { key: teamKey, status: "acquired" as const, publication_status: receipt.publication_status ?? "unknown" };
       }),
     );
 
