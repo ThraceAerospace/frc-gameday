@@ -36,7 +36,7 @@ class FakeWebSocket {
   }
 }
 
-test("SharedWorker fetches canonical snapshots before /stream and never refetches from WSS messages", async () => {
+test("SharedWorker recovers revision-only notices with read-only HTTP snapshot reads", async () => {
   process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL = "https://runtime.example.test";
   globalThis.WebSocket = FakeWebSocket;
   globalThis.location = { protocol: "https:", host: "fieldview.example.test" };
@@ -55,7 +55,7 @@ test("SharedWorker fetches canonical snapshots before /stream and never refetche
         publication: { marker: revision },
       }, { headers: { ETag: 'W/"analytics-1"' } });
     }
-    const version = fetchedVersions.length + 1;
+    const version = fetchedVersions.length === 0 ? 1 : 4;
     fetchedVersions.push(version);
     return Response.json(
       {
@@ -198,7 +198,8 @@ test("SharedWorker fetches canonical snapshots before /stream and never refetche
     version: 4,
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(fetchedVersions, [1], "invalid or revision-only WSS messages never trigger HTTP snapshot reads");
+  assert.deepEqual(fetchedVersions, [1, 4], "revision-only notices trigger one canonical HTTP snapshot read");
+  assert.equal(received.at(-1).version, 4);
   assert.deepEqual(analyticsRevisions, [1], "WSS analytics notifications are data-bearing and never trigger HTTP reads");
 
   socket.close();
@@ -217,7 +218,7 @@ test("SharedWorker fetches canonical snapshots before /stream and never refetche
     type: "subscribed", topic: "analytics", event_key: "2026test",
   }));
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.deepEqual(fetchedVersions, [1], "reconnect does not trigger a WSS-driven snapshot refetch");
+  assert.deepEqual(fetchedVersions, [1, 4], "reconnect does not trigger an additional snapshot read");
   assert.deepEqual(analyticsRevisions, [1], "reconnect does not trigger a WSS-driven analytics refetch");
 
   unsubscribeFirst();
