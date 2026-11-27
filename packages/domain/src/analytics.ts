@@ -217,8 +217,6 @@ export interface FieldViewEventAnalytics {
   audit?: FieldViewAnalyticsAudit;
 }
 
-/** @deprecated Use FieldViewTeamEventAnalytics. */
-export type FieldViewTeamAnalytics = FieldViewTeamEventAnalytics;
 
 /** Team analytics scoped to one team's participation at one event. */
 export interface FieldViewTeamEventAnalytics {
