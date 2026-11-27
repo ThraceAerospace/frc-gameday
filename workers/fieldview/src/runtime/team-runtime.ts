@@ -251,7 +251,7 @@ export class TeamRuntime extends DurableObjectBase {
       }
       const receipt = await this.storage.transaction(async (tx) => {
         const receiptKey = "bootstrap:accepted:" + year;
-        const previous = await tx.get<{ bootstrap_id: string; acquired_at: number; snapshot_revision: number; publication_status: "complete" | "partial" | "failed" }>(receiptKey);
+        const previous = await tx.get<{ bootstrap_id: string; acquired_at: number; snapshot_revision: number; resource_status: "complete" | "partial" | "failed" }>(receiptKey);
         if (previous?.bootstrap_id === body.bootstrap_id) return { ...previous, duplicate: true };
         if (previous && previous.acquired_at > body.acquired_at) return null;
         const existing = await Promise.all(body.resources.map((resource) => tx.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint))));
@@ -278,16 +278,15 @@ export class TeamRuntime extends DurableObjectBase {
         await tx.put("snapshot-revision", snapshotRevision);
         const status = effectiveResources.every((resource) => resource.status === "available") ? "complete" as const
           : effectiveResources.some((resource) => resource.lastFetchedAt !== null || resource.lastWebhookAt !== null) ? "partial" as const : "failed" as const;
-        const next = { bootstrap_id: body.bootstrap_id, acquired_at: body.acquired_at, snapshot_revision: snapshotRevision, publication_status: status };
+        const next = { bootstrap_id: body.bootstrap_id, acquired_at: body.acquired_at, snapshot_revision: snapshotRevision, resource_status: status };
         await tx.put(receiptKey, next);
         return { ...next, duplicate: false };
       });
       if (!receipt) return Response.json({ error: "Bootstrap is older than runtime data" }, { status: 409 });
-      await this.snapshot(year);
       return Response.json({
         bootstrap_id: receipt.bootstrap_id, accepted: true, duplicate: receipt.duplicate,
         kind: "team", key: this.teamKey, year, snapshot_revision: receipt.snapshot_revision,
-        publication_status: receipt.publication_status,
+        resource_status: receipt.resource_status,
       });
     }
 
