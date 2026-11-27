@@ -57,3 +57,24 @@ test("both Durable Objects bootstrap provider resources without materializing cl
   assert.match(dispatch, /bootstrap: "bootstrap"/);
   assert.match(dispatch, /action === "bootstrap" \? "bootstrap\?year="/);
 });
+
+
+test("client state projections are optional and snapshot reads never persist them", () => {
+  const eventProjectionStart = eventRuntime.indexOf("private async publishEventState()");
+  const eventProjectionEnd = eventRuntime.indexOf("private async recalculateAnalytics(", eventProjectionStart);
+  const eventProjection = eventRuntime.slice(eventProjectionStart, eventProjectionEnd);
+  assert.ok(eventProjectionStart >= 0 && eventProjectionEnd > eventProjectionStart);
+  assert.doesNotMatch(eventProjection, /storage\\.(put|delete)|transaction\\(async/);
+
+  const teamProjectionStart = teamRuntime.indexOf("private async snapshot(year:");
+  const teamProjectionEnd = teamRuntime.indexOf("private async pollResourceNow(", teamProjectionStart);
+  const teamProjection = teamRuntime.slice(teamProjectionStart, teamProjectionEnd);
+  assert.ok(teamProjectionStart >= 0 && teamProjectionEnd > teamProjectionStart);
+  assert.doesNotMatch(teamProjection, /storage\\.(put|delete)|tx\\.(put|delete)/);
+
+  const seasonAnalyticsStart = teamRuntime.indexOf("private async buildSeasonAnalyticsResponse(");
+  const seasonAnalyticsEnd = teamRuntime.indexOf("\\n  private async ", seasonAnalyticsStart + 1);
+  const seasonAnalytics = teamRuntime.slice(seasonAnalyticsStart, seasonAnalyticsEnd);
+  assert.doesNotMatch(seasonAnalytics, /storage\\.put/);
+  assert.match(seasonAnalytics, /seasonAnalyticsCache\\.set/);
+});
