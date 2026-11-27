@@ -1,12 +1,6 @@
 @import "tailwindcss";
 @source "../../web/src/app/admin/runtime";
 
-/*
- * Standalone admin application reset.
- * Let the document be the only vertical scroll container. Keep this file
- * deliberately small: layout belongs to the dashboard's component classes,
- * not global structural selectors that depend on a particular tab's DOM.
- */
 :root {
   color-scheme: light;
   --fv-brand: #7656C9;
@@ -26,48 +20,20 @@
 }
 
 html {
-  width: 100%;
-  min-width: 0;
+  min-width: 320px;
   min-height: 100%;
-  height: auto;
-  overflow-x: clip;
-  overflow-y: auto;
+  background: var(--fv-surface);
 }
 
 body {
-  width: 100%;
-  min-width: 0;
-  min-height: 100%;
-  height: auto;
+  min-width: 320px;
+  min-height: 100vh;
   margin: 0;
-  overflow-x: clip;
-  overflow-y: visible;
   background: var(--fv-surface);
   color: var(--fv-text);
   font-family: Arial, Helvetica, sans-serif;
 }
 
 #root {
-  width: 100%;
-  min-width: 0;
-  min-height: 100dvh;
-  height: auto;
-  overflow: visible;
-}
-
-/* The dashboard must never create a second page-height scrollport. */
-#root > main.custom-scrollbar {
-  display: block;
-  min-height: 100dvh;
-  height: auto;
-  overflow: visible;
-  overscroll-behavior: auto;
-}
-
-/* Preserve the tab strip's horizontal navigation on narrow screens. */
-#root > main > nav {
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
+  min-height: 100vh;
 }
