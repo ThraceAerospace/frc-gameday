@@ -58,11 +58,8 @@ body {
 /* The dashboard must never create a second page-height scrollport. */
 #root > main.custom-scrollbar {
   display: block;
-  width: 100%;
-  max-width: none;
   min-height: 100dvh;
   height: auto;
-  margin: 0;
   overflow: visible;
   overscroll-behavior: auto;
 }
