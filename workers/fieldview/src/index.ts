@@ -64,4 +64,4 @@ export default {
 };
 
 export { EventRuntime, TeamRuntime, Multiplexer, RemoteSessionRuntime } from "./runtime/index.ts";
-export { EventSeasonReadinessWorkflow, TeamSeasonReadinessWorkflow, SeasonStatusResolverWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow } from "./jobs/index.ts";
+export { SeasonDiscoveryWorkflow, EventSeasonReadinessWorkflow, TeamSeasonReadinessWorkflow, SeasonStatusResolverWorkflow, CoverageAuditWorkflow, RuntimeAdminWorkflow, PollingCoordinatorWorkflow, WeeklyEventProjectionWorkflow, EventAnalyticsWorkflow } from "./jobs/index.ts";
