@@ -26,9 +26,6 @@
       "@/*": [
         "./src/*"
       ],
-      "@fieldview/domain": [
-        "../../packages/domain/src/index.ts"
-      ],
       "@fieldview/analytics/*": [
         "../../packages/analytics/src/*"
       ],
