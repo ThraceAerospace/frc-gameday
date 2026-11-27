@@ -1,5 +1,7 @@
+import { bestMatchTime, sortMatchesByTime, type TbaMatchOrderingFields } from "@fieldview/domain";
+
 /** Minimal shared match shape used by canonical and temporary legacy consumers. */
-export interface MatchLike {
+export interface MatchLike extends TbaMatchOrderingFields {
   actual_time?: number | null;
   predicted_time?: number | null;
   time?: number | null;
@@ -22,23 +24,13 @@ export function hasPostedScore<T extends MatchLike>(match: T) {
   );
 }
 
-export function matchTime(
-  match: MatchLike,
-) {
-  return (
-    match.predicted_time ??
-    match.time ??
-    Infinity
-  );
+export function matchTime(match: MatchLike) {
+  return bestMatchTime(match) ?? Infinity;
 }
 
-export function sortMatches<T extends MatchLike>(
-  matches: T[],
-) {
-  return [...matches].sort(
-    (a, b) =>
-      matchTime(a) - matchTime(b),
-  );
+/** Use TBA's stable BestTime ordering across legacy web consumers as well. */
+export function sortMatches<T extends MatchLike>(matches: T[]) {
+  return sortMatchesByTime(matches);
 }
 
 /*
