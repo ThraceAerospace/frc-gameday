@@ -743,7 +743,6 @@ export class TeamRuntime extends DurableObjectBase {
       })));
       return Response.json({
         scheduled: false,
-        queued: false,
         attempted: true,
         team_key: this.teamKey,
         year,
