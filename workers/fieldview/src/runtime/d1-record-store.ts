@@ -79,8 +79,8 @@ export class SystemRecordsRepository extends D1RecordRepository {
 }
 
 /**
- * Compatibility-shaped key/value facade used by the in-process discovery service.
- * It routes discovery and operational key families to their separate repositories.
+ * D1 record router for the discovery service's two explicit record domains.
+ * Discovery and operational keys are stored in their owning logical tables.
  */
 export class D1RecordStore implements D1RecordStorage {
   private readonly db: D1DatabaseLike;
