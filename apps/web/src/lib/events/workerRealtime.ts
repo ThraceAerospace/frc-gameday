@@ -63,7 +63,6 @@ class WorkerEventWebSocket {
   private readonly statusHandlers = new Set<StatusHandler>();
   private readonly snapshots = new Map<string, CanonicalSnapshot>();
   private readonly sentSubscriptions = new Set<string>();
-  private readonly acknowledgedSubscriptions = new Set<string>();
   private readonly runtimeBaseUrl = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL?.replace(/\/+$/, "") || null;
   private status: EventWebSocketStatus = "disconnected";
   private disposed = false;
@@ -191,7 +190,6 @@ class WorkerEventWebSocket {
       if (this.socket !== socket) return;
       this.reconnectDelay = 1_000;
       this.sentSubscriptions.clear();
-      this.acknowledgedSubscriptions.clear();
       this.setStatus("connected");
       for (const eventKey of this.activeEventKeys()) this.sendSubscription("event-state", eventKey, true);
       for (const eventKey of this.analyticsHandlers.keys()) this.sendSubscription("analytics", eventKey, true);
@@ -220,7 +218,6 @@ class WorkerEventWebSocket {
       if (this.socket !== socket) return;
       this.socket = null;
       this.sentSubscriptions.clear();
-      this.acknowledgedSubscriptions.clear();
       if (this.heartbeatTimer !== null) clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
       this.setStatus("disconnected");
@@ -241,7 +238,6 @@ class WorkerEventWebSocket {
     if (message.type === "pong" || message.type === "connected") return;
     if (message.type === "subscribed" && message.topic === "analytics" &&
         typeof message.event_key === "string") {
-      this.acknowledgedSubscriptions.add("analytics:" + message.event_key);
       return;
     }
     if (message.type === "analytics.changed" && typeof message.event_key === "string") {
@@ -276,7 +272,6 @@ class WorkerEventWebSocket {
     }
     if (message.type === "subscribed" && message.topic === "event-state" &&
         typeof message.event_key === "string") {
-      this.acknowledgedSubscriptions.add("event-state:" + message.event_key);
       return;
     }
     if (message.type === "snapshot.changed" && typeof message.event_key === "string") {
@@ -321,15 +316,7 @@ class WorkerEventWebSocket {
               analytics: { ...nextState.analytics, team_comparison: undefined },
             } as FieldViewEventState;
           }
-          const rosterKeys = Array.isArray(nextState.teams)
-            ? nextState.teams.flatMap((team) =>
-                isRecord(team) && typeof team.key === "string" ? [team.key] : [])
-            : null;
-          const cachedTeamKeys = new Set(teamStates.map((item) => item.team_key));
-          const rosterComplete = rosterKeys !== null &&
-            rosterKeys.length === teamStates.length &&
-            rosterKeys.every((teamKey) => cachedTeamKeys.has(teamKey));
-          const complete = Boolean(rosterComplete && (state !== null || teamState !== null));
+          const complete = Array.isArray(nextState.teams);
           const value: CanonicalSnapshot = {
             version,
             snapshot: { state: nextState, team_states: teamStates },
@@ -343,7 +330,7 @@ class WorkerEventWebSocket {
     }
   }
 
-  private async fetchCanonicalAnalytics(eventKey: string, expectedRevision?: number) {
+  private async fetchCanonicalAnalytics(eventKey: string) {
     if (!this.runtimeBaseUrl) return;
     try {
       const url = new URL("/events/" + encodeURIComponent(eventKey) + "/analytics", this.runtimeBaseUrl);
@@ -351,10 +338,7 @@ class WorkerEventWebSocket {
       const headers = new Headers();
       if (current?.etag) headers.set("If-None-Match", current.etag);
       let response = await fetch(url, { cache: "no-store", headers });
-      if (response.status === 304) {
-        if (current && (expectedRevision === undefined || current.revision >= expectedRevision)) return;
-        response = await fetch(url, { cache: "no-store" });
-      }
+      if (response.status === 304) return;
       if (!response.ok) throw new Error("Analytics request failed: HTTP " + response.status);
       const value = await response.json() as CanonicalAnalyticsPublication;
       if (value.event_key !== eventKey || !Number.isSafeInteger(value.revision) || value.revision < 0) {
@@ -363,7 +347,6 @@ class WorkerEventWebSocket {
       const next = { ...value, etag: response.headers.get("ETag") ?? undefined };
       const latest = this.analyticsPublications.get(eventKey);
       if (latest && next.revision < latest.revision) return;
-      if (expectedRevision !== undefined && next.revision < expectedRevision) return;
       this.analyticsPublications.set(eventKey, next);
       for (const handler of this.analyticsHandlers.get(eventKey) ?? []) handler(next);
     } catch (error) {
@@ -371,7 +354,7 @@ class WorkerEventWebSocket {
     }
   }
 
-  private async fetchCanonicalSnapshot(eventKey: string, expectedVersion?: number) {
+  private async fetchCanonicalSnapshot(eventKey: string) {
     if (!this.runtimeBaseUrl) return;
     try {
       const url = new URL(`/events/${encodeURIComponent(eventKey)}/snapshot`, this.runtimeBaseUrl);
@@ -379,10 +362,7 @@ class WorkerEventWebSocket {
       const headers = new Headers();
       if (current?.complete && current.etag) headers.set("If-None-Match", current.etag);
       let response = await fetch(url, { cache: "no-store", headers });
-      if (response.status === 304) {
-        if (current?.complete && (expectedVersion === undefined || current.version >= expectedVersion)) return;
-        response = await fetch(url, { cache: "no-store" });
-      }
+      if (response.status === 304) return;
       if (!response.ok) throw new Error(`Snapshot request failed: HTTP ${response.status}`);
       const version = Number(response.headers.get("X-FieldView-Snapshot-Version"));
       if (!Number.isSafeInteger(version) || version < 0) throw new Error("Snapshot response omitted a valid version");
@@ -396,16 +376,13 @@ class WorkerEventWebSocket {
             isRecord(team) && typeof team.key === "string" ? [team.key] : [])
         : null;
       const receivedTeamKeys = new Set(normalizedTeamStates.map((team) => team.team_key));
-      const complete = expectedTeamKeys !== null &&
-        expectedTeamKeys.length === normalizedTeamStates.length &&
-        expectedTeamKeys.every((teamKey) => receivedTeamKeys.has(teamKey));
+      const complete = Array.isArray(state.teams);
       const snapshot: CanonicalEventSnapshotData = {
         state,
         team_states: normalizedTeamStates,
       };
       const latest = this.snapshots.get(eventKey);
       if (latest && version < latest.version) return;
-      if (expectedVersion !== undefined && version < expectedVersion) return;
       const value: CanonicalSnapshot = {
         version,
         snapshot,
@@ -427,7 +404,6 @@ class WorkerEventWebSocket {
     } else {
       if (!this.sentSubscriptions.has(key)) return;
       this.sentSubscriptions.delete(key);
-      this.acknowledgedSubscriptions.delete(key);
     }
     if (this.socket?.readyState !== WebSocket.OPEN) return;
     if (this.runtimeBaseUrl) {
