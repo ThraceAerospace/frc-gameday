@@ -1,55 +1,46 @@
-# EventState and Analytics
+# EventState, TeamState, and analytics
 
-## Canonical data model
+## State projections
 
-EventRuntime and TeamRuntime store provider endpoint responses as independent durable resources, along with validators, freshness metadata, revisions, and acquisition status.
+EventState and TeamState are normalized FieldView contracts intended for clients. They are not provider payloads and are not durable canonical records.
 
-- **EventState** is the normalized event-scoped client read model derived by EventRuntime.
-- **TeamState** is the normalized team-season client read model derived by TeamRuntime.
-- **TeamEventState** is the team/event-scoped analytics input/result contract owned by TeamRuntime. It is not embedded into EventState.
-- **EventAnalytics** is the event-owned analytics publication produced by the analytics Workflow and published by EventRuntime.
+- EventRuntime stores event-scoped provider endpoint responses and acquisition metadata.
+- TeamRuntime stores team/year-scoped provider endpoint responses and acquisition metadata.
+- A request for an event or team snapshot derives the corresponding normalized projection from the owning runtime's stored endpoint records.
+- The runtime may reuse a disposable in-memory projection while the source revision/signature is unchanged.
+- A cold read or cache eviction recomputes the projection. Snapshot reads do not write Durable Object storage, call provider APIs, initialize runtimes, or schedule work.
 
-These models have distinct ownership and must not be used as substitutes for provider endpoint records.
+Provider endpoint records—not a previously materialized EventState/TeamState object—are the durable inputs. Analytics records are separate purpose-specific outputs and do not gate snapshot projection.
 
-## Read lifecycle
+## Analytics ownership
 
-1. The client requests an event or team snapshot from the Runtime Worker.
-2. EventRuntime/TeamRuntime read the relevant endpoint records.
-3. A matching hot in-memory projection may be reused.
-4. If no matching projection exists, the Durable Object constructs an ephemeral normalized projection from the endpoint records.
-5. The Worker returns the normalized FieldView contract with its revision, validator, and source metadata.
+Analytics calculations are implemented in the provider/UI-independent analytics package and orchestrated by backend jobs. EventRuntime owns event-wide analytics publications. TeamRuntime owns team- and team-event-scoped analytics publications. Cross-runtime inputs are read through explicit versioned interfaces; a runtime must not copy another runtime's complete canonical aggregate into its own storage.
 
-Projection materialization is disposable. DO eviction is expected and must not affect correctness. A projection may optionally be persisted as a fast path, but reads must never assume it exists. A cold read must not write storage, refresh providers, schedule work, or create a readiness record.
+Analytics publications have their own revision and provenance. A publication is committed only when its required inputs and source revisions satisfy the calculation contract. Revisions must be monotonic within their publication scope. Partial or failed inputs must not silently erase a last-good result.
 
-## Write lifecycle
+## Realtime contract
 
-Only explicit acquisition or reconciliation operations write provider endpoint records:
-- initial bootstrap from readiness Workflows;
-- coordinator-dispatched provider refresh;
-- authenticated TBA webhook reconciliation;
-- explicit admin refresh commands.
+The browser performs an HTTP snapshot read before opening the shared Multiplexer `/stream` WebSocket. The initial snapshot establishes the starting version; subsequent stream messages carry the actual changed data.
 
-A 304 response updates endpoint freshness/attempt metadata according to the endpoint-state contract without replacing the last-good payload. Failed refreshes preserve last-good data and update failure metadata. Reads surface available stale data with source metadata rather than triggering hidden provider work.
+- Event snapshot notifications carry the updated EventState data.
+- Team-event updates carry the changed patch/data and its owning scope.
+- Analytics notifications carry the committed analytics publication.
+- Messages include identity and ordering/revision metadata so the SharedWorker can reject duplicates or out-of-order updates.
+- A revision-only invalidation is not a valid update.
+- The SharedWorker applies data-bearing messages to its in-memory cache and fans them out to subscribed clients.
+- Notifications, acknowledgements, gaps, disconnects, and reconnects never cause a hidden HTTP snapshot or analytics refetch. Reconnect restores subscriptions only.
 
-## Analytics lifecycle
+A new page/client read or an explicit user refresh may request another HTTP snapshot. The browser does not persist normalized snapshots in IndexedDB.
 
-EventAnalyticsWorkflow coordinates cross-runtime calculations:
-1. Read versioned EventRuntime analytics inputs.
-2. Resolve registered TeamRuntime owners.
-3. Ask TeamRuntime to prepare versioned season/event analytics inputs.
-4. Calculate team/event analytics using the shared analytics package.
-5. Publish the aggregate to EventRuntime.
-6. Acknowledge TeamRuntime results only after successful EventRuntime publication.
+## Provider and failure semantics
 
-Revision checks reject stale inputs and prevent publication regression. Workflow retries recover failed publication/acknowledgement steps. Analytics GET routes read the last publication; they do not start calculations.
+Provider clients return upstream data without converting it into frontend contracts. Domain normalization owns FieldView construction, cross-provider correlation, and explicit source precedence.
 
-## Realtime lifecycle
+Preserve provenance and freshness. Missing/unavailable data, explicit null/clear, zero, stale values, and failed acquisition are distinct states. A partial provider failure must not erase unrelated valid data. Do not let request completion order determine which provider wins a field.
 
-The browser obtains the initial snapshot through the Runtime Worker and then subscribes to `/stream`. The origin-wide SharedWorker owns one stream connection and fans canonical snapshot/analytics updates to tabs. The initial HTTP snapshot is fetched before the stream is opened. On reconnect, the SharedWorker only re-registers subscriptions; data-bearing WebSocket notifications never trigger HTTP snapshot or analytics refetches. Explicit refresh actions remain HTTP reads. It does not acquire provider resources, maintain a second EventState model, or run periodic REST polling.
+## Related contracts
 
-## Operational invariants
-
-- EventState/TeamState are projections, not the durable source of truth.
-- Provider endpoint records remain authoritative even if every projection cache is evicted.
-- Snapshot, discovery, analytics-input, and analytics-publication GETs are read-only.
-- No queue consumer, Redis cache, Vercel realtime bridge, or browser provider client participates in the data path.
+- [Canonical data model](domain/FIELDVIEW-DATA-MODEL-V1.md)
+- [Analytics result contract](analytics/DOMAIN-RESULT-CONTRACT.md)
+- [Calculation auditability](analytics/CALCULATION-AUDITABILITY.md)
+- [ADR-0020](architecture/decisions/ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md)
