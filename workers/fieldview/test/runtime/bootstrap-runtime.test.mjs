@@ -95,7 +95,7 @@ test("TeamRuntime accepts and idempotently republishes a year-scoped bootstrap",
   const endpoints = teamResourceEndpoints(key, year).map((item) => item.endpoint);
   const resources = endpoints.map((endpoint, index) => resource(
     endpoint,
-    index === 0 ? { key, team_number: 3461, name: "Bootstrap Team" } : [],
+    index === 0 ? { key, team_number: 3461, name: "Bootstrap Team" } : index === 4 || index === 6 ? {} : [],
     acquiredAt,
   ));
   const bundle = {
