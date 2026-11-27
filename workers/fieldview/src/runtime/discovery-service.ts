@@ -77,6 +77,23 @@ export class DiscoveryService {
     await this.putValues([[key, value]]);
   }
 
+  async getRecord(key: string): Promise<string | undefined> {
+    return this.storage.get<string>(key);
+  }
+
+  async putRecord(key: string, value: string): Promise<void> {
+    if (!key || key.length > 1024) throw new Error("Invalid discovery record key");
+    if (new TextEncoder().encode(value).byteLength > 7_000_000) throw new Error("Discovery record exceeds the 7 MB safety limit");
+    JSON.parse(value);
+    const previous = await this.storage.get<string>(key);
+    await this.storage.put(key, value);
+    await this.pruneSupersededRecord(key, previous, value);
+  }
+
+  async listRecords(options: { prefix?: string; startAfter?: string; limit?: number } = {}): Promise<Map<string, string>> {
+    return this.storage.list<string>(options);
+  }
+
   private requireApi(): TBAApiClient {
     if (!this.api) throw new Error("TBA provider is not configured");
     return this.api;
@@ -367,45 +384,6 @@ export class DiscoveryService {
       return Response.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (request.method === "GET" && url.pathname === "/get") {
-      const key = url.searchParams.get("key");
-      if (!key || key.length > 1024) return Response.json({ error: "Invalid key" }, { status: 400 });
-      const value = await this.storage.get<string>(key);
-      return value === undefined ? new Response(null, { status: 404 }) : new Response(value, {
-        headers: { "Content-Type": "application/json; charset=utf-8" },
-      });
-    }
-    if (request.method === "POST" && url.pathname === "/put") {
-      const body: unknown = await request.json().catch(() => null);
-      if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ error: "Invalid write" }, { status: 400 });
-      const input = body as Record<string, unknown>;
-      if (typeof input.key !== "string" || !input.key.length || input.key.length > 1024 || typeof input.value !== "string") {
-        return Response.json({ error: "Expected a key and string value" }, { status: 400 });
-      }
-      if (new TextEncoder().encode(input.value).byteLength > 7_000_000) {
-        return Response.json({ error: "Catalog record exceeds the 7 MB safety limit" }, { status: 413 });
-      }
-      const previous = await this.storage.get<string>(input.key);
-      await this.storage.put(input.key, input.value);
-      await this.pruneSupersededRecord(input.key, previous, input.value);
-      return Response.json({ ok: true });
-    }
-    if (request.method === "GET" && url.pathname === "/list") {
-      const prefix = url.searchParams.get("prefix") ?? "";
-      const cursor = url.searchParams.get("cursor") ?? "";
-      const limit = Number(url.searchParams.get("limit") ?? "1000");
-      if (prefix.length > 1024 || cursor.length > 1100 || !Number.isSafeInteger(limit) || limit < 1 || limit > MAX_LIST_LIMIT) {
-        return Response.json({ error: "Invalid list query" }, { status: 400 });
-      }
-      const entries = await this.storage.list<string>({
-        prefix: prefix, ...(cursor ? { startAfter: cursor } : {}), limit: limit + 1,
-      });
-      const keys = [...entries.keys()].filter((key) => key.startsWith(prefix));
-      const truncated = keys.length > limit;
-      const page = keys.slice(0, limit);
-      return Response.json({ objects: page.map((key) => ({ key })), truncated,
-        ...(truncated && page.length ? { cursor: page[page.length - 1] } : {}) });
-    }
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 }
