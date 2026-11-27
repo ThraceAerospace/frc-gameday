@@ -7,9 +7,7 @@ compatibility_date = "2026-11-22"
 workers_dev = true
 preview_urls = true
 
-# These values are injected only by `wrangler dev`; they are not deployed.
-[dev.vars]
-LOCAL_ADMIN_AUTH = "true"
+# Local-only settings belong in workers/fieldview/.dev.vars (see .dev.vars.example).
 
 [assets]
 directory = "./admin-assets"
