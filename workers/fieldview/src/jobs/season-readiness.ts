@@ -96,7 +96,7 @@ async function runSeasonReadiness(
   const workflowId = event.instanceId;
   const type = kind + "-readiness";
   const prefix = "admin/workflow-runs/" + type + "/" + workflowId;
-  const startedAt = event.payload.requestedAt ?? Date.now();
+  const startedAt = event.payload?.requestedAt ?? Date.now();
   const initial = {
     workflow_id: workflowId, workflow_type: type, status: "running", year,
     started_at: startedAt, updated_at: Date.now(), completed_at: null,
