@@ -35,7 +35,6 @@ import {
 import { buildFieldViewEventTeamSummaries, calculateFieldViewEventTeamComparisonAnalytics } from "../../../../packages/analytics/src/event-team-comparison-analytics.ts";
 import { isEventAnalyticsPublicationCommand } from "./analytics-orchestration-contract.ts";
 import type { TeamEventAnalyticsResult } from "./analytics-orchestration-contract.ts";
-import type { FieldViewEventView } from "../../../../packages/domain/src/event-view.ts";
 import type { FieldViewTeamEventState } from "../../../../packages/domain/src/team.ts";
 
 const ENDPOINT_PREFIX = "endpoint:";
@@ -372,7 +371,7 @@ export class EventRuntime extends DurableObjectBase {
     const adminAuthorized = Boolean(this.env.RUNTIME_ADMIN_TOKEN) &&
       request.headers.get("Authorization") === "Bearer " + this.env.RUNTIME_ADMIN_TOKEN;
     const publicRead = request.method === "GET" &&
-      (url.pathname === "/snapshot" || url.pathname === "/view" || url.pathname === "/analytics" || url.pathname === "/statbotics-match" || url.pathname === "/stream");
+      (url.pathname === "/snapshot" || url.pathname === "/analytics" || url.pathname === "/statbotics-match" || url.pathname === "/stream");
     const publicSubscriptionRead = request.method === "POST" && url.pathname === "/subscriptions";
     const readinessRequest = request.method === "POST" && url.pathname === "/readiness";
     const adminInspectionRead = request.method === "GET" &&
@@ -451,14 +450,6 @@ export class EventRuntime extends DurableObjectBase {
           (body.generation !== undefined &&
             (!Number.isSafeInteger(body.generation) || (body.generation as number) < 1))) {
         return Response.json({ error: "Expected a valid topic, subscribe or unsubscribe action, and an optional positive generation" }, { status: 400 });
-      }
-      if (body.action === "subscribe") {
-        const currentState = await this.publishEventState();
-        if (!currentState) return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
-        if (!Number.isSafeInteger(currentState.snapshotVersion) || !isRecord(currentState.state) ||
-            currentState.state.event_key !== this.eventKey || !isRecord(currentState.state.sources)) {
-          return Response.json({ error: "EventState projection is invalid" }, { status: 500, headers: { "Cache-Control": "no-store" } });
-        }
       }
       const topic = body.topic === "analytics" ? "analytics" : "event-state";
       const generationKey = topic === "analytics"
@@ -813,14 +804,6 @@ export class EventRuntime extends DurableObjectBase {
       return Response.json(match, { headers: { "Cache-Control": "no-store" } });
     }
 
-    if (request.method === "POST" && url.pathname === "/publish-state") {
-      const publication = await this.publishEventState();
-      return Response.json({
-        event_key: this.eventKey, status: publication.status,
-        source_revision: publication.sourceRevision, generated_at: publication.generatedAt,
-      }, { headers: { "Cache-Control": "no-store" } });
-    }
-
     if (request.method === "GET" && url.pathname === "/snapshot") {
       const publication = await this.publishEventState();
       if (!publication) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
@@ -851,80 +834,6 @@ export class EventRuntime extends DurableObjectBase {
       }
       const { analytics: _unownedAnalytics, ...eventOwnedState } = publication.state;
       return Response.json(eventOwnedState, { headers });
-    }
-
-    if (request.method === "GET" && url.pathname === "/view") {
-      const publication = await this.publishEventState();
-      if (!publication) return Response.json({ error: "EventState publication not found" }, { status: 404, headers: { "Cache-Control": "no-store" } });
-      if (!Number.isSafeInteger(publication.snapshotVersion) || !isRecord(publication.state) ||
-          publication.state.event_key !== this.eventKey || !isRecord(publication.state.sources)) {
-        return Response.json({ error: "EventState projection is invalid" }, { status: 500, headers: { "Cache-Control": "no-store" } });
-      }
-      const viewSourceStates = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      const viewExpectedEndpoints = [...eventResourceEndpoints(this.eventKey),
-        STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
-      const viewSourceRevision = viewExpectedEndpoints.reduce((total, endpoint) =>
-        total + (viewSourceStates.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
-      const viewSourceStale = viewExpectedEndpoints.some((endpoint) => {
-        const source = viewSourceStates.get(endpointStorageKey(endpoint));
-        return !source || source.status === "failed" || source.status === "stale" ||
-          (source.expiresAt !== null && source.expiresAt <= Date.now());
-      });
-      const viewEventStateStatus = viewSourceStale || viewSourceRevision !== publication.sourceRevision
-        ? "stale" : publication.status;
-      const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
-      const analyticsIsCurrent = analyticsPublication?.sourceRevision === publication.sourceRevision;
-      const comparisonInputUpdatedAt = await this.storage.get<number>(EVENT_COMPARISON_INPUT_UPDATED_AT_KEY);
-      const storedAnalytics = analyticsIsCurrent
-        ? analyticsPublication?.eventAnalytics as FieldViewEventView["analytics"] | undefined
-        : undefined;
-      const teamComparisonIsCurrent = storedAnalytics?.team_comparison?.input_updated_at === comparisonInputUpdatedAt;
-      const analytics = storedAnalytics
-        ? teamComparisonIsCurrent ? storedAnalytics : {
-            ...storedAnalytics,
-            team_comparison: undefined,
-            team_summaries: undefined,
-          }
-        : null;
-      const expected = (publication.state.teams ?? []).map((team) => team.key);
-      const teamStateRevisions = analyticsIsCurrent ? analyticsPublication?.teamStateRevisions ?? [] : [];
-      const teamRevisionsByKey = new Map(teamStateRevisions.map((item) => [item.team_key, item.revision]));
-      const teamStateRefs: FieldViewEventView["team_state_refs"] = expected.map((teamKey) => ({
-        owner: "team-runtime",
-        owner_id: teamKey as FieldViewEventView["team_state_refs"][number]["owner_id"],
-        record_type: "team-event-state",
-        record_id: this.eventKey as FieldViewEventView["team_state_refs"][number]["record_id"],
-        revision: teamRevisionsByKey.get(teamKey) ?? null,
-      }));
-      const pendingTeamKeys = teamStateRefs.filter((item) => item.revision === null).map((item) => item.owner_id);
-      const materializedTeamCount = teamStateRefs.length - pendingTeamKeys.length;
-      const analyticsStatus = await this.storage.get<string>("analytics:status");
-      const teamStatesComplete = analyticsIsCurrent && teamComparisonIsCurrent && analyticsStatus === "succeeded" &&
-        expected.length === materializedTeamCount;
-      const view: FieldViewEventView = {
-        event: Object.fromEntries(Object.entries(publication.state)
-          .filter(([key]) => key !== "analytics" && key !== "team_states")) as FieldViewEventView["event"],
-        analytics,
-        team_state_refs: teamStateRefs,
-        team_state_coverage: {
-          state: teamStatesComplete || (expected.length === 0 && Array.isArray(publication.state.teams))
-            ? "complete" : "partial",
-          expected_count: expected.length,
-          materialized_count: materializedTeamCount,
-          pending_team_keys: pendingTeamKeys,
-        },
-      };
-      return Response.json(view, {
-        headers: {
-          "X-FieldView-Event-State-Status": viewEventStateStatus,
-          "X-FieldView-Team-State-Coverage": view.team_state_coverage.state,
-          ...(analyticsIsCurrent ? {
-            "X-FieldView-Analytics-Revision": String(analyticsPublication?.analyticsRevision ?? 0),
-            "X-FieldView-Analytics-Source-Revision": String(analyticsPublication?.sourceRevision),
-          } : {}),
-          "Cache-Control": "no-store",
-        },
-      });
     }
 
     if (request.method === "GET" && url.pathname === "/analytics-state") {
@@ -1000,7 +909,7 @@ export class EventRuntime extends DurableObjectBase {
         total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
       // Admin diagnostics must stay local to this EventRuntime. Checking every
       // participant's TeamRuntime here turns one dashboard read into an N+1
-      // cross-object fan-out; full team-state coverage belongs to /view.
+      // cross-object fan-out; team-state coverage is owned by TeamRuntime.
       const teamStateCoverageStatus = rosterAvailable ? "not_inspected" : "unavailable";
       const hasStaleSources = expectedEndpoints.some((endpoint) => {
         const source = entries.get(endpointStorageKey(endpoint));
