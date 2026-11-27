@@ -27,8 +27,6 @@ interface DiscoveryDocument {
 }
 
 interface JobsEnvironment extends RuntimeEnvironment, SeasonEnvironment {
-  DAILY_EVENT_READINESS: Workflow;
-  DAILY_TEAM_READINESS: Workflow;
   COVERAGE_AUDIT: Workflow;
   RUNTIME_ADMIN: Workflow;
   POLLING_COORDINATOR?: Workflow;
@@ -382,6 +380,9 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
   }
 }
 
+
+/** Explicit, year-parameterized discovery Workflow; it does not resolve canonical season. */
+export class SeasonDiscoveryWorkflow extends SeasonDiscoveryWorkflowBase {}
 
 /**
  * Sequential readiness sweep. The Workflow never acquires entity resources:
@@ -1192,7 +1193,7 @@ export default {
       if (!job) return Response.json({ year, status: "not_started" }, { headers: { "Cache-Control": "no-store" } });
       let workflowStatus: string | null = null;
       try {
-        const instance = await env.DAILY_EVENT_READINESS.get(job.workflow_id);
+        const instance = await env.SEASON_DISCOVERY.get(job.workflow_id);
         workflowStatus = (await instance.status()).status;
       } catch { workflowStatus = null; }
       const status = workflowStatus === "paused" ? "paused"
@@ -1218,7 +1219,7 @@ export default {
       const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryServiceClient(env), key);
       if (current?.status === "running") {
         try {
-          const instance = await env.DAILY_EVENT_READINESS.get(current.workflow_id);
+          const instance = await env.SEASON_DISCOVERY.get(current.workflow_id);
           const status = await instance.status();
           if (["queued", "running", "waiting", "waitingForPause", "paused"].includes(status.status)) {
             return Response.json({ ...current, workflow_status: status.status }, {
@@ -1238,7 +1239,7 @@ export default {
         httpMetadata: { contentType: "application/json" },
       });
       try {
-        await env.DAILY_EVENT_READINESS.create({
+        await env.SEASON_DISCOVERY.create({
           id: workflowId,
           params: { operation: "discover-season", year, requestedAt, jobId: workflowId },
         });
