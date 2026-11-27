@@ -81,8 +81,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 async function readJson<T>(bucket: DiscoveryServiceClient, key: string): Promise<T | null> {
-  const object = await bucket.get(key);
-  return object ? object.json<T>() : null;
+  return bucket.get<T>(key);
 }
 
 async function listRuntimeRegistry(bucket: DiscoveryServiceClient, kind: "event" | "team"): Promise<string[]> {
@@ -91,9 +90,9 @@ async function listRuntimeRegistry(bucket: DiscoveryServiceClient, kind: "event"
   let cursor: string | undefined;
   do {
     const page = await bucket.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) });
-    for (const object of page.objects) {
-      const key = object.key.slice(prefix.length).replace(/\.json$/, "");
-      if (key) keys.push(key);
+    for (const key of page.keys) {
+      const runtimeKey = key.slice(prefix.length).replace(/\.json$/, "");
+      if (runtimeKey) keys.push(runtimeKey);
     }
     cursor = page.truncated ? page.cursor : undefined;
   } while (cursor);
@@ -142,9 +141,7 @@ async function registerDiscoveredRuntimes(
           throw new Error(kind + " runtime registration failed for " + key + " with HTTP " +
             response.status + ": " + (await response.text()).slice(0, 300));
         }
-        await bucket.put(markerPrefix + key + ".json", "{}", {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await bucket.put(markerPrefix + key + ".json", "{}");
         count += 1;
       }
       return { initialized: count };
@@ -230,9 +227,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           ...defaults, ...(current ?? {}), ...patch,
           ...{ workflow_id: jobId, year: season, updated_at: Date.now() },
         };
-        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(next), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(next));
         return next;
       });
 
@@ -366,9 +361,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         error: null, started_at: requestedAt, updated_at: Date.now(),
       };
       await step.do("publish-manual-discovery-summary", async () => {
-        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(summary), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(summary));
         return summary;
       });
       return summary;
@@ -384,9 +377,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           team_generation: current?.team_generation, steps: current?.steps ?? 0, error: detail.slice(0, 500),
           started_at: requestedAt, updated_at: Date.now(),
         };
-        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(failed), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(failed));
         return failed;
       });
       throw error;
@@ -449,17 +440,13 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           else if (lifecycle === "upcoming") counts.events_upcoming += 1;
         }
         const allItemsKey = itemsPrefix + "all.json";
-        await createDiscoveryServiceClient(this.env).put(allItemsKey, JSON.stringify(items), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(this.env).put(allItemsKey, JSON.stringify(items));
         const record: CoverageAuditRecord = {
           year, workflow_id: workflowId, status: "running", started_at: startedAt, updated_at: now,
           cursor: 0, total: items.length, event_discovery_updated_at: directory.eventUpdatedAt,
           team_discovery_updated_at: directory.teamUpdatedAt, items_prefix: itemsPrefix, counts, error: null,
         };
-        await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify(record), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify(record));
         return { total: items.length, chunkCount: Math.ceil(items.length / 100), counts, itemsPrefix, record };
       });
 
@@ -472,7 +459,6 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
             await createDiscoveryServiceClient(this.env).put(
               prepared.itemsPrefix + `${chunk}.json`,
               JSON.stringify(allItems.slice(chunk * 100, (chunk + 1) * 100)),
-              { httpMetadata: { contentType: "application/json" } },
             );
           }
           return { chunks_written: endChunk - firstChunk };
@@ -568,9 +554,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
             ...prepared.record, cursor: nextCursor, counts: nextCounts,
             status: "running", updated_at: Date.now(),
           };
-          await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify(record), {
-            httpMetadata: { contentType: "application/json" },
-          });
+          await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify(record));
           return { cursor: nextCursor, counts: nextCounts };
         });
         cursor = batchResult.cursor;
@@ -586,9 +570,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
           ...prepared.record, cursor, counts, status: stale ? "stale" : "completed",
           updated_at: Date.now(), error: null,
         };
-        await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify(record), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify(record));
         return record;
       });
       return { ...completed };
@@ -598,7 +580,7 @@ export class CoverageAuditWorkflow extends WorkflowEntrypoint<JobsEnvironment, C
         const current = await readJson<CoverageAuditRecord>(createDiscoveryServiceClient(this.env), auditKey);
         if (current) await createDiscoveryServiceClient(this.env).put(auditKey, JSON.stringify({
           ...current, status: "failed", error: detail.slice(0, 500), updated_at: Date.now(),
-        }), { httpMetadata: { contentType: "application/json" } });
+        }));
         return { status: "failed", error: detail };
       });
       throw error;
@@ -639,7 +621,7 @@ export default {
           : workflowStatus === "errored" ? "failed"
           : workflowStatus === "complete" ? record.status : record.status;
         const history = await createDiscoveryServiceClient(env).list({ prefix: `admin/runtime-job-history/${operation}/${subject}/`, limit: 1000 });
-        return Response.json({ ...record, status: mappedStatus, workflow_status: workflowStatus, history_count: history.objects.length }, {
+        return Response.json({ ...record, status: mappedStatus, workflow_status: workflowStatus, history_count: history.keys.length }, {
           headers: { "Cache-Control": "no-store" },
         });
       }
@@ -691,7 +673,7 @@ export default {
         const previous = await readJson<Record<string, unknown>>(createDiscoveryServiceClient(env), `admin/runtime-jobs/${pointer.workflow_id}.json`);
         if (previous) await createDiscoveryServiceClient(env).put(
           `admin/runtime-job-history/${operation}/${subject}/${pointer.workflow_id}.json`,
-          JSON.stringify(previous), { httpMetadata: { contentType: "application/json" } },
+          JSON.stringify(previous),
         );
       }
       const requestedAt = Date.now();
@@ -708,12 +690,12 @@ export default {
           seeded_teams: 0, failed_teams: 0, historical_events_scheduled: 0,
         } : {}),
       };
-      await createDiscoveryServiceClient(env).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial), { httpMetadata: { contentType: "application/json" } });
-      await createDiscoveryServiceClient(env).put(indexKey, JSON.stringify({ workflow_id: workflowId }), { httpMetadata: { contentType: "application/json" } });
+      await createDiscoveryServiceClient(env).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(initial));
+      await createDiscoveryServiceClient(env).put(indexKey, JSON.stringify({ workflow_id: workflowId }));
       try { await env.RUNTIME_ADMIN.create({ id: workflowId, params }); }
       catch (error) {
         const failed = { ...initial, status: "failed", phase: "failed", errors: [{ key: subject, detail: error instanceof Error ? error.message : String(error), at: Date.now() }] };
-        await createDiscoveryServiceClient(env).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed), { httpMetadata: { contentType: "application/json" } });
+        await createDiscoveryServiceClient(env).put(`admin/runtime-jobs/${workflowId}.json`, JSON.stringify(failed));
         return Response.json(failed, { status: 409 });
       }
       return Response.json(initial, { status: 202, headers: { "Cache-Control": "no-store" } });
@@ -785,7 +767,6 @@ export default {
           await createDiscoveryServiceClient(env).put(
             `admin/coverage-audit-history/${year}/${current.workflow_id}.json`,
             JSON.stringify(current),
-            { httpMetadata: { contentType: "application/json" } },
           );
         }
         const startedAt = Date.now();
@@ -806,9 +787,7 @@ export default {
           event_discovery_updated_at: directory.eventUpdatedAt, team_discovery_updated_at: directory.teamUpdatedAt,
           items_prefix: `admin/coverage-audit-items/${year}/${workflowId}/`, counts: zeroCounts, error: null,
         };
-        await createDiscoveryServiceClient(env).put(key, JSON.stringify(current), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(env).put(key, JSON.stringify(current));
         try {
           await env.COVERAGE_AUDIT.create({
             id: workflowId, params: { year, workflowId, startedAt },
@@ -816,9 +795,7 @@ export default {
         } catch (error) {
           const failed = { ...current, status: "failed" as const,
             error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
-          await createDiscoveryServiceClient(env).put(key, JSON.stringify(failed), {
-            httpMetadata: { contentType: "application/json" },
-          });
+          await createDiscoveryServiceClient(env).put(key, JSON.stringify(failed));
           return Response.json(failed, { status: 409 });
         }
         return Response.json(current, { status: 202, headers: { "Cache-Control": "no-store" } });
@@ -895,9 +872,7 @@ export default {
         events: 0, teams: 0, team_pages: 0, steps: 0, error: null,
         started_at: requestedAt, updated_at: requestedAt,
       };
-      await createDiscoveryServiceClient(env).put(key, JSON.stringify(job), {
-        httpMetadata: { contentType: "application/json" },
-      });
+      await createDiscoveryServiceClient(env).put(key, JSON.stringify(job));
       try {
         await env.SEASON_DISCOVERY.create({
           id: workflowId,
@@ -906,9 +881,7 @@ export default {
       } catch (error) {
         const failed = { ...job, status: "failed" as const, stage: "failed",
           error: error instanceof Error ? error.message : String(error), updated_at: Date.now() };
-        await createDiscoveryServiceClient(env).put(key, JSON.stringify(failed), {
-          httpMetadata: { contentType: "application/json" },
-        });
+        await createDiscoveryServiceClient(env).put(key, JSON.stringify(failed));
         return Response.json(failed, { status: 409 });
       }
       return Response.json(job, { status: 202, headers: { "Cache-Control": "no-store" } });
@@ -940,10 +913,10 @@ export default {
         let resolvedRecord = record;
         if (workflowStatus === "errored" && ["running", "queued"].includes(String(record.status))) {
           resolvedRecord = { ...record, status: "failed", updated_at: Date.now(), completed_at: Date.now(), error: workflowError ?? "Workflow execution failed" };
-          await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord), { httpMetadata: { contentType: "application/json" } });
+          await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord));
         } else if (workflowStatus === "terminated" && ["running", "queued"].includes(String(record.status))) {
           resolvedRecord = { ...record, status: "cancelled", updated_at: Date.now(), completed_at: Date.now() };
-          await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord), { httpMetadata: { contentType: "application/json" } });
+          await store.put(`${prefix}/record.json`, JSON.stringify(resolvedRecord));
         }
         const summaryObject = await store.get(`${prefix}/summary.json`);
         const summary = summaryObject ? await summaryObject.json<Record<string, unknown>>() : null;
@@ -961,14 +934,14 @@ export default {
       }
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit") ?? 25) || 25));
       const page = await store.list({ prefix: `admin/workflow-runs/index/${type}/`, limit: 1000 });
-      const entries = page.objects.slice(-limit).reverse();
+      const entries = page.keys.slice(-limit).reverse();
       const runs = (await mapWithConcurrency(entries, 5, async (entry) => {
         const object = await store.get(entry.key);
         if (!object) return null;
-        const indexRecord = await object.json<Record<string, unknown>>();
+        const indexRecord = object ?? {};
         const id = typeof indexRecord.workflow_id === "string" ? indexRecord.workflow_id : "";
-        const recordObject = id ? await store.get(`admin/workflow-runs/${type}/${id}/record.json`) : null;
-        let record = recordObject ? await recordObject.json<Record<string, unknown>>() : {};
+        const recordObject = id ? await store.get<Record<string, unknown>>(`admin/workflow-runs/${type}/${id}/record.json`) : null;
+        let record = recordObject ?? {};
         if (id && ["running", "queued"].includes(String(record.status))) {
           try {
             const binding = type === "event-readiness" ? env.EVENT_SEASON_READINESS : env.TEAM_SEASON_READINESS;
@@ -977,16 +950,14 @@ export default {
               record = { ...record, status: workflowStatus === "errored" ? "failed" : "cancelled",
                 updated_at: Date.now(), completed_at: Date.now(),
                 ...(workflowStatus === "errored" ? { error: "Cloudflare Workflow execution failed; inspect the Workflow instance for details." } : {}) };
-              await store.put(`admin/workflow-runs/${type}/${id}/record.json`, JSON.stringify(record), {
-                httpMetadata: { contentType: "application/json" },
-              });
+              await store.put(`admin/workflow-runs/${type}/${id}/record.json`, JSON.stringify(record));
             }
             record = { ...record, workflow_status: workflowStatus };
           } catch { /* Retain the durable run record if the Workflow status API is temporarily unavailable. */ }
         }
         return { ...indexRecord, ...record };
       })).filter((run): run is Record<string, unknown> => run !== null);
-      return Response.json({ type, runs, total: page.objects.length }, {
+      return Response.json({ type, runs, total: page.keys.length }, {
         headers: { "Cache-Control": "no-store" },
       });
     }
