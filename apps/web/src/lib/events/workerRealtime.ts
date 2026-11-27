@@ -17,7 +17,7 @@ export type CanonicalEventSnapshotData = {
 export type CanonicalSnapshot = {
   version: number;
   snapshot: CanonicalEventSnapshotData;
-  /** True only when the cache contains the complete composed snapshot, including team states. */
+  /** True when the canonical EventState includes its event and team roster. */
   complete?: boolean;
   etag?: string;
 };
@@ -276,7 +276,6 @@ class WorkerEventWebSocket {
     }
     if (message.type === "snapshot.changed" && typeof message.event_key === "string") {
       const eventKey = message.event_key;
-      this.acknowledgedSubscriptions.add("event-state:" + eventKey);
       const version = Number.isSafeInteger(message.version) && (message.version as number) >= 0
         ? message.version as number : undefined;
       if ((this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0) {
@@ -371,11 +370,6 @@ class WorkerEventWebSocket {
       };
       const { team_states, ...state } = payload;
       const normalizedTeamStates = team_states ?? [];
-      const expectedTeamKeys = Array.isArray(state.teams)
-        ? state.teams.flatMap((team) =>
-            isRecord(team) && typeof team.key === "string" ? [team.key] : [])
-        : null;
-      const receivedTeamKeys = new Set(normalizedTeamStates.map((team) => team.team_key));
       const complete = Array.isArray(state.teams);
       const snapshot: CanonicalEventSnapshotData = {
         state,
@@ -406,13 +400,11 @@ class WorkerEventWebSocket {
       this.sentSubscriptions.delete(key);
     }
     if (this.socket?.readyState !== WebSocket.OPEN) return;
-    if (this.runtimeBaseUrl) {
-      this.socket.send(JSON.stringify({
-        type: subscribe ? "subscribe" : "unsubscribe",
-        topic,
-        event_key: eventKey,
-      }));
-    }
+    this.socket.send(JSON.stringify({
+      type: subscribe ? "subscribe" : "unsubscribe",
+      topic,
+      event_key: eventKey,
+    }));
   }
 
   private setStatus(status: EventWebSocketStatus) {
@@ -435,7 +427,6 @@ class WorkerEventWebSocket {
     const socket = this.socket;
     this.socket = null;
     this.sentSubscriptions.clear();
-    this.acknowledgedSubscriptions.clear();
     if (socket) socket.close();
     this.setStatus("disconnected");
   }
