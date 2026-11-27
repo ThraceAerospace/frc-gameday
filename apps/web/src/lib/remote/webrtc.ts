@@ -32,11 +32,6 @@ type PeerOptions = {
   onMessage?: (message: RemoteSessionMessage) => void;
 };
 
-function getSignalingUrl(code: string, role: RemoteRole, token: string) {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}/api/remote/ws?code=${encodeURIComponent(code)}&role=${role}&token=${encodeURIComponent(token)}`;
-}
-
 function getRuntimeSignalingUrl(baseUrl: string, code: string, role: RemoteRole): string {
   const url = new URL(baseUrl);
   if (url.protocol === "https:") url.protocol = "wss:";
@@ -117,12 +112,25 @@ export class RemotePeer {
 
     this.options.onSignalingStatus?.("connecting");
 
-    const socket = this.runtimeBaseUrl
-      ? new WebSocket(
-          getRuntimeSignalingUrl(this.runtimeBaseUrl, this.options.code, this.options.role),
-          ["fieldview.remote.v1", "role." + this.options.role, "token." + this.token],
-        )
-      : new WebSocket(getSignalingUrl(this.options.code, this.options.role, this.token));
+    if (!this.runtimeBaseUrl) {
+      this.options.onSignalingStatus?.("error");
+      this.options.onStatus?.("error");
+      console.error("[Remote] Worker signaling is unavailable: NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL is not configured.");
+      return;
+    }
+
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(
+        getRuntimeSignalingUrl(this.runtimeBaseUrl, this.options.code, this.options.role),
+        ["fieldview.remote.v1", "role." + this.options.role, "token." + this.token],
+      );
+    } catch (error) {
+      this.options.onSignalingStatus?.("error");
+      this.options.onStatus?.("error");
+      console.error("[Remote] Could not connect to the FieldView runtime signaling endpoint:", error);
+      return;
+    }
 
     this.socket = socket;
 
