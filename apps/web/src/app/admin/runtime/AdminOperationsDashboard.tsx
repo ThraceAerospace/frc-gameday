@@ -129,7 +129,12 @@ export default function AdminOperationsDashboard() {
   const [teamSeedJob, setTeamSeedJob] = useState<TeamSeedJob | null>(null);
   const [discoveryJob, setDiscoveryJob] = useState<DiscoveryJob | null>(null);
   const [selected, setSelected] = useState<{ kind: Kind; key: string; year: number } | null>(null);
-  const [tab, setTab] = useState<"home" | "events" | "teams" | "system">("home");
+  const [tab, setTab] = useState<"home" | "bootstrap" | "events" | "teams" | "system">("home");
+  const [bootstrapMode, setBootstrapMode] = useState<"current" | "historical">("current");
+  const [bootstrapYear, setBootstrapYear] = useState("");
+  const [seedKind, setSeedKind] = useState<Kind>("event");
+  const [seedKey, setSeedKey] = useState("");
+  const [seedYear, setSeedYear] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -457,7 +462,7 @@ export default function AdminOperationsDashboard() {
     </header>
     {(error || message) && <div role={error ? "alert" : "status"} className={"mt-4 rounded-xl border px-4 py-3 text-sm " + (error ? "border-rose-300 text-rose-700" : "border-[var(--fv-border)]")}>{error || message}</div>}
     <nav className="mt-6 flex gap-1 overflow-x-auto border-b border-[var(--fv-border)]" aria-label="Operations sections">
-      {(["home", "events", "teams", "system"] as const).map((item) => <button key={item} onClick={() => { setTab(item); if (item === "events" || item === "teams") setKind(item === "events" ? "event" : "team"); setSelected(null); setEntity(null); setQuery(""); window.history.pushState(null, "", "/admin/runtime"); }} className={"shrink-0 border-b-2 px-4 py-3 text-sm font-semibold capitalize " + (tab === item ? "border-[var(--fv-brand)] text-[var(--fv-text)]" : "border-transparent text-[var(--fv-muted)]")}>{item === "home" ? "Overview" : item}</button>)}
+      {(["home", "bootstrap", "events", "teams", "system"] as const).map((item) => <button key={item} onClick={() => { setTab(item); if (item === "events" || item === "teams") setKind(item === "events" ? "event" : "team"); setSelected(null); setEntity(null); setQuery(""); window.history.pushState(null, "", "/admin/runtime"); }} className={"shrink-0 border-b-2 px-4 py-3 text-sm font-semibold capitalize " + (tab === item ? "border-[var(--fv-brand)] text-[var(--fv-text)]" : "border-transparent text-[var(--fv-muted)]")}>{item === "home" ? "Overview" : item === "bootstrap" ? "Bootstrap" : item}</button>)}
     </nav>
 
     {tab === "home" && <div className="mt-6 space-y-4">
@@ -530,6 +535,88 @@ export default function AdminOperationsDashboard() {
       </Panel>
       <Panel><h2 className="font-bold">Current-season discovery Workflow</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">TBA /status selects the season. The scheduled Workflow publishes the event and team directories, initializes upcoming/active/recently completed EventRuntime instances, and seeds participants for this week’s events.</p><div className="mt-3 grid gap-3 text-sm sm:grid-cols-3"><div><p className="text-xs text-[var(--fv-muted)]">Directory status</p><strong className={statusTone(overview?.current_season?.status)}>{overview?.current_season?.status ?? "Unavailable"}</strong></div><div><p className="text-xs text-[var(--fv-muted)]">Discovered events</p>{overview?.current_season?.event_count ?? "—"}</div><div><p className="text-xs text-[var(--fv-muted)]">Last directory update</p>{time(overview?.current_season?.updated_at)}</div></div></Panel>
     </div>}
+
+    {tab === "bootstrap" && !selected && <section className="mt-6 space-y-6">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--fv-brand)]">Empty-state setup</p>
+        <h2 className="mt-1 text-2xl font-bold tracking-tight">Bring FieldView online</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--fv-muted)]">Initialize directory metadata first, then populate canonical runtime state. These are explicit operator actions; opening this page never starts provider ingestion.</p>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(300px,.8fr)]">
+        <Panel>
+          <div className="flex items-start justify-between gap-3">
+            <div><h3 className="text-lg font-bold">1. Discover season directories</h3><p className="mt-1 text-xs leading-5 text-[var(--fv-muted)]">Retrieves TBA /status, persists its authoritative current_season pointer, discovers the selected year's event directory and all paginated team pages, and registers runtime identities. It does not fully populate EventState, TeamState, or analytics.</p></div>
+            <span className="rounded-full bg-[var(--fv-brand-soft)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--fv-brand-strong)]">Required first</span>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Season discovery mode">
+            <button type="button" onClick={() => setBootstrapMode("current")} className={"rounded-lg px-3 py-2 text-xs font-semibold " + (bootstrapMode === "current" ? "bg-[var(--fv-brand)] text-white" : "border border-[var(--fv-border)]")}>Current season</button>
+            <button type="button" onClick={() => setBootstrapMode("historical")} className={"rounded-lg px-3 py-2 text-xs font-semibold " + (bootstrapMode === "historical" ? "bg-[var(--fv-brand)] text-white" : "border border-[var(--fv-border)]")}>Historical season</button>
+          </div>
+          {bootstrapMode === "current" ? <div className="mt-4 rounded-xl border border-[var(--fv-border)] p-3">
+            <p className="text-xs font-semibold">Canonical current season</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">{overview?.current_season?.year ?? "Not initialized"}</p>
+            <p className="mt-1 text-xs leading-5 text-[var(--fv-muted)]">{overview?.current_season?.status === "available" ? "The persisted pointer is available. Discovery will refresh it from TBA before rebuilding the directory." : "The pointer is empty or unavailable. Enter the expected year for the first directory pass; the workflow independently resolves and persists TBA's current_season."}</p>
+            {overview?.current_season?.year == null && <label className="mt-3 block text-xs font-semibold">Expected TBA current season
+              <input type="number" min="1992" max="2200" value={bootstrapYear} onChange={(event) => setBootstrapYear(event.target.value)} placeholder="e.g. 2027" className="mt-1 block w-full max-w-xs rounded-lg border border-[var(--fv-border)] bg-white px-3 py-2 text-sm font-normal" />
+            </label>}
+          </div> : <div className="mt-4 rounded-xl border border-[var(--fv-border)] p-3">
+            <p className="text-xs font-semibold">Historical directory year</p>
+            <label className="mt-2 block text-xs text-[var(--fv-muted)]">Season year
+              <input type="number" min="1992" max="2200" value={bootstrapYear} onChange={(event) => setBootstrapYear(event.target.value)} placeholder="e.g. 2024" className="mt-1 block w-full max-w-xs rounded-lg border border-[var(--fv-border)] bg-white px-3 py-2 text-sm text-[var(--fv-text)]" />
+            </label>
+            <p className="mt-2 text-xs leading-5 text-[var(--fv-muted)]">Historical discovery writes that year's directory only. TBA /status is still checked to maintain the separate canonical current-season pointer; the historical year never replaces it.</p>
+          </div>}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button disabled={busy || !(bootstrapMode === "current" ? (overview?.current_season?.year ?? Number(bootstrapYear)) : Number(bootstrapYear))} onClick={() => {
+              const targetYear = bootstrapMode === "current" ? (overview?.current_season?.year ?? Number(bootstrapYear)) : Number(bootstrapYear);
+              if (!Number.isInteger(targetYear) || targetYear < 1992 || targetYear > 2200) { setError("Enter a valid season year."); return; }
+              void dispatch("system", "discover-year", undefined, undefined, targetYear);
+            }} className="rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">{busy ? "Starting…" : bootstrapMode === "current" ? "Resolve current season & discover" : "Discover historical season"}</button>
+            <span className="text-xs text-[var(--fv-muted)]">Existing discovery job: {discoveryJob?.status ?? "not started"}</span>
+          </div>
+          {discoveryJob && discoveryJob.status !== "not_started" && <div className="mt-4 rounded-xl border border-[var(--fv-border)] p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-sm">Discovery progress · {discoveryJob.year}</strong><span className={"text-xs font-bold " + statusTone(discoveryJob.status === "completed" ? "succeeded" : discoveryJob.status === "failed" ? "failed" : "running")}>{discoveryJob.status.replaceAll("_", " ")}</span></div>
+            <p className="mt-2 text-xs text-[var(--fv-muted)]">Stage: {discoveryJob.stage ?? "queued"} · {discoveryJob.events ?? 0} events · {discoveryJob.teams ?? 0} teams · {discoveryJob.steps ?? 0} workflow steps</p>
+            {discoveryJob.error && <p className="mt-2 text-xs text-rose-600">{discoveryJob.error}</p>}
+          </div>}
+        </Panel>
+        <Panel>
+          <h3 className="text-lg font-bold">2. Populate canonical data</h3>
+          <p className="mt-1 text-xs leading-5 text-[var(--fv-muted)]">Directory discovery creates the inventory and registers runtime identities. Full-season ingestion then seeds TeamRuntime snapshots, acquires event resources, publishes EventState, and calculates EventAnalytics.</p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-[var(--fv-surface)] p-3"><p className="text-[10px] uppercase tracking-wide text-[var(--fv-muted)]">Events discovered</p><p className="mt-1 text-2xl font-bold">{overview?.current_season?.event_count ?? (seasonPreview?.events ?? "—")}</p></div>
+            <div className="rounded-xl bg-[var(--fv-surface)] p-3"><p className="text-[10px] uppercase tracking-wide text-[var(--fv-muted)]">Teams registered</p><p className="mt-1 text-2xl font-bold">{overview?.inventory?.teams ?? "—"}</p></div>
+          </div>
+          <p className="mt-3 text-xs text-[var(--fv-muted)]">Selected ingestion season: <strong>{year || "not selected"}</strong></p>
+          <button disabled={busy || !year} onClick={() => { setTab("home"); void previewSeasonIngest(); }} className="mt-4 rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm font-semibold disabled:opacity-40">Preview canonical ingestion</button>
+          {seasonIngest && <p className="mt-3 text-xs text-[var(--fv-muted)]">Ingestion status: <strong>{seasonIngest.status.replaceAll("_", " ")}</strong> · {seasonIngest.phase ?? "—"}</p>}
+        </Panel>
+      </div>
+      <Panel>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-lg font-bold">Seed one entity by TBA key</h3><p className="mt-1 max-w-3xl text-xs leading-5 text-[var(--fv-muted)]">Use this for targeted initialization without running a full-season ingestion. Event keys look like 2026mmr; team keys look like frc10063. Team seeding also registers the team's event history for the selected season.</p></div><span className="text-xs text-[var(--fv-muted)]">Independent of season-wide ingestion</span></div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[160px_minmax(180px,1fr)_130px_auto] sm:items-end">
+          <label className="text-xs font-semibold">Entity type
+            <select value={seedKind} onChange={(event) => setSeedKind(event.target.value as Kind)} className="mt-1 block w-full rounded-lg border border-[var(--fv-border)] bg-white px-3 py-2.5 text-sm font-normal"><option value="event">Event</option><option value="team">Team</option></select>
+          </label>
+          <label className="text-xs font-semibold">TBA key
+            <input value={seedKey} onChange={(event) => setSeedKey(event.target.value.trim())} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); document.getElementById("fieldview-seed-entity")?.click(); } }} placeholder={seedKind === "event" ? "2026mmr" : "frc10063"} className="mt-1 block w-full rounded-lg border border-[var(--fv-border)] bg-white px-3 py-2.5 text-sm font-normal" />
+          </label>
+          <label className="text-xs font-semibold">Season context
+            <input type="number" min="1992" max="2200" value={seedYear || year || ""} onChange={(event) => setSeedYear(event.target.value)} className="mt-1 block w-full rounded-lg border border-[var(--fv-border)] bg-white px-3 py-2.5 text-sm font-normal" />
+          </label>
+          <button id="fieldview-seed-entity" disabled={busy || !seedKey || !(Number(seedYear || year) >= 1992)} onClick={() => {
+            const key = seedKey.trim();
+            const targetYear = Number(seedYear || year || (seedKind === "event" ? key.slice(0, 4) : 0));
+            if (seedKind === "event" && !/^\d{4}[a-zA-Z0-9_-]+$/.test(key)) { setError("Enter an event key such as 2026mmr."); return; }
+            if (seedKind === "team" && !/^frc\d+$/.test(key)) { setError("Enter a team key such as frc10063."); return; }
+            if (!Number.isInteger(targetYear) || targetYear < 1992 || targetYear > 2200) { setError("Select a valid season context."); return; }
+            void dispatch(seedKind, seedKind === "event" ? "refresh" : "seed", key, undefined, targetYear);
+            setSeedKey("");
+          }} className="rounded-lg bg-[var(--fv-brand)] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-40">Seed entity</button>
+        </div>
+        <p className="mt-3 text-[11px] leading-5 text-[var(--fv-muted)]">Event seeding initializes its EventRuntime and acquires its configured event resources. Team seeding runs the durable team-seed Workflow and registers historical event identities found in that team's selected-season history. Neither action starts a season-wide ingest.</p>
+      </Panel>
+    </section>}
 
     {(tab === "events" || tab === "teams") && !selected && <section className="mt-6 space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{tab === "events" ? "Event directory" : "Team directory"}</h2><p className="mt-1 text-xs text-[var(--fv-muted)]">Search the full registered inventory and open an individual command center.</p></div><div className="flex flex-wrap gap-2"><label className="flex items-center gap-2 text-xs text-[var(--fv-muted)]">Season <input aria-label="Inventory season year" type="number" min="1992" max="2200" value={year || ""} onChange={(event) => { setYear(Number(event.target.value)); setYearInitialized(true); }} className="w-24 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-2 py-2 text-sm text-[var(--fv-text)]" /></label><input aria-label="Search inventory" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tab === "events" ? "Search event key…" : "Search team key…"} className="w-64 rounded-lg border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] px-3 py-2 text-sm" /><button disabled={!year} onClick={() => void loadInventory(0)} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm disabled:opacity-50">Search</button></div></div>
