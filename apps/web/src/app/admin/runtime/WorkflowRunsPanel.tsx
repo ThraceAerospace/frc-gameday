@@ -70,11 +70,29 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
   }, [authenticated, type]);
 
   useEffect(() => { void loadRuns().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause))); }, [loadRuns]);
+
+  // Keep the history visible without requiring a manual refresh. This also
+  // discovers runs started by the parent Admin Operations controls.
   useEffect(() => {
-    if (!selected || selected.workflow_type !== type || !["running", "queued"].includes(selected.status)) return;
+    if (!authenticated) return;
+    const timer = window.setInterval(() => {
+      void loadRuns().catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [authenticated, loadRuns]);
+
+  // Select the newest run automatically so its live status/report is visible
+  // immediately after a run is started elsewhere in the admin panel.
+  useEffect(() => {
+    if (selected || runs.runs.length === 0) return;
+    void loadRun(runs.runs[0]!.workflow_id).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
+  }, [runs, selected, loadRun]);
+
+  useEffect(() => {
+    if (!selected || selected.workflow_type !== type || !["running", "queued"].includes(selected.workflow_status ?? selected.status)) return;
     const timer = window.setInterval(() => {
       void loadRun(selected.workflow_id).then(() => loadRuns()).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
-    }, 15_000);
+    }, 5_000);
     return () => window.clearInterval(timer);
   }, [selected, type, loadRun, loadRuns]);
 
@@ -170,7 +188,7 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
             {runs.runs.length === 0 && <p className="rounded-lg border border-dashed border-[var(--fv-border)] p-3 text-sm text-[var(--fv-muted)]">No {label(type).toLowerCase()} runs recorded yet.</p>}
             {runs.runs.map((run) => (
               <button key={run.workflow_id} onClick={() => void loadRun(run.workflow_id).catch((cause) => setError(String(cause)))} className={"block w-full rounded-lg border p-3 text-left " + (selected?.workflow_id === run.workflow_id ? "border-[var(--fv-brand)] bg-[var(--fv-surface)]" : "border-[var(--fv-border)]")}>
-                <span className={"block text-sm font-semibold " + statusClass(run.status)}>{(run.status ?? "unknown").replaceAll("_", " ")}</span>
+                <span className={"block text-sm font-semibold " + statusClass(run.status)}>{(run.workflow_status ?? run.status ?? "unknown").replaceAll("_", " ")}</span>
                 <span className="mt-1 block text-xs text-[var(--fv-muted)]">{timestamp(run.started_at)} · {run.year ?? "season pending"}</span>
                 <span className="mt-1 block break-all font-mono text-[11px] text-[var(--fv-muted)]">{run.workflow_id}</span>
               </button>
@@ -182,10 +200,10 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
           {!selected && <p className="rounded-lg border border-dashed border-[var(--fv-border)] p-4 text-sm text-[var(--fv-muted)]">Select a run to inspect its result. New runs appear here as soon as they are accepted.</p>}
           {selected && <>
             <div className="rounded-lg border border-[var(--fv-border)] p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{label(type)} · {selected.year ?? "Resolving season"}</strong><span className={"text-sm font-semibold " + statusClass(selected.status)}>{selected.status.replaceAll("_", " ")}</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>{label(type)} · {selected.year ?? "Resolving season"}</strong><span className={"text-sm font-semibold " + statusClass(selected.status)}>{(selected.workflow_status ?? selected.status).replaceAll("_", " ")}</span></div>
               <p className="mt-1 break-all font-mono text-xs text-[var(--fv-muted)]">{selected.workflow_id}</p>
               <p className="mt-2 text-xs text-[var(--fv-muted)]">Started {timestamp(selected.started_at)} · Completed {timestamp(selected.completed_at)}</p>
-              {["running", "queued"].includes(selected.status) && <p className="mt-3 text-sm text-[var(--fv-muted)]">The workflow is still running. The dashboard checks its status periodically; the final report appears when execution completes.</p>}
+              {["running", "queued"].includes(selected.workflow_status ?? selected.status) && <p className="mt-3 text-sm text-[var(--fv-muted)]">The workflow is still running. The dashboard checks its status periodically; the final report appears when execution completes.</p>}
               {selected.error && <p className="mt-3 whitespace-pre-wrap text-sm text-rose-600">{selected.error}</p>}
               {selected.summary && <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[ [totalLabel, total], ["Valid state", valid], ["Refresh required", required], ["Failed", failed] ].map(([name, value]) => <div key={String(name)} className="rounded-lg bg-[var(--fv-surface)] p-3"><p className="text-xs text-[var(--fv-muted)]">{name}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>)}
