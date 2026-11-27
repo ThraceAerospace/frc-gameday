@@ -25,7 +25,7 @@ npm run dev
 npm run dev:worker
 ```
 
-Local Worker secrets and variables belong in `workers/fieldview/.dev.vars` (copy the example file there). Frontend deployment variables belong to the Vercel project configuration; do not place Worker secrets in frontend-visible variables. Do not create a root `.env` file.
+Local Worker secrets and variables belong in `workers/fieldview/.dev.vars` (copy `workers/fieldview/.dev.vars.example` there). Frontend deployment variables belong to the Vercel project configuration; do not place Worker secrets in frontend-visible variables. Do not create a root `.env` file.
 
 Validate the repository:
 
