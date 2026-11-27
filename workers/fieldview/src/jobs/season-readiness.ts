@@ -252,23 +252,42 @@ export async function consumeSeasonRefreshQueue(batch: QueueBatchLike, env: Seas
       message.ack();
       continue;
     }
-    let retry = false;
-    for (const task of payload.tasks) {
+
+    const outcomes = await mapWithConcurrency(payload.tasks, 4, async (task) => {
       if (!validYear(task.year) || (task.kind !== "event" && task.kind !== "team") ||
-          (task.kind === "team" ? !validTeam(task.key) : !validEvent(task.key))) continue;
+          (task.kind === "team" ? !validTeam(task.key) : !validEvent(task.key))) {
+        return { retry: false, dispatched: false, skipped: true };
+      }
       try {
         const readiness = await dispatchRuntime(env, task.kind, task.key, "readiness", {}, task.year);
-        if (readiness.status === 429 || readiness.status >= 500) { retry = true; break; }
-        if (!readiness.ok) continue;
+        if (readiness.status === 429 || readiness.status >= 500) {
+          return { retry: true, dispatched: false, skipped: false };
+        }
+        if (!readiness.ok) return { retry: false, dispatched: false, skipped: true };
         const status = await readiness.json() as { state_valid?: boolean; refresh_required?: boolean };
-        if (status.state_valid === true && status.refresh_required !== true) continue;
+        if (status.state_valid === true && status.refresh_required !== true) {
+          return { retry: false, dispatched: false, skipped: true };
+        }
         const refresh = await dispatchRuntime(env, task.kind, task.key, "refresh", {}, task.year);
-        if (refresh.status === 429 || refresh.status >= 500) { retry = true; break; }
+        if (refresh.status === 429 || refresh.status >= 500) {
+          return { retry: true, dispatched: false, skipped: false };
+        }
+        return { retry: false, dispatched: refresh.ok, skipped: !refresh.ok };
       } catch {
-        retry = true;
-        break;
+        return { retry: true, dispatched: false, skipped: false };
       }
-    }
+    });
+
+    const retry = outcomes.some((outcome) => outcome.retry);
+    const dispatched = outcomes.filter((outcome) => outcome.dispatched).length;
+    const skipped = outcomes.filter((outcome) => outcome.skipped).length;
+    console.log("[season-refresh-queue]", JSON.stringify({
+      tasks: payload.tasks.length,
+      dispatched,
+      skipped,
+      retry,
+      concurrency: Math.min(4, payload.tasks.length),
+    }));
     if (retry) message.retry({ delaySeconds: 30 });
     else message.ack();
   }
