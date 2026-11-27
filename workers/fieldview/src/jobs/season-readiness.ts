@@ -205,7 +205,7 @@ async function runSeasonReadiness(
           if (readinessResult.state_valid === true) {
             return {
               key, state_valid: true, refresh_required: false, queued: false,
-              bootstrapped: true, already_initialized: true, publication_status: "existing",
+              bootstrapped: false, already_initialized: true, publication_status: "existing",
             };
           }
           const bootstrapId = "season:" + workflowId + ":" + kind + ":" + year + ":" + key;
@@ -237,7 +237,7 @@ async function runSeasonReadiness(
     states_valid: results.filter((item) => item.state_valid).length,
     bootstrapped: results.filter((item) => item.bootstrapped).length,
     already_initialized: results.filter((item) => item.already_initialized).length,
-    bootstrap_failed: results.filter((item) => !item.bootstrapped).length,
+    bootstrap_failed: results.filter((item) => !item.bootstrapped && !item.already_initialized).length,
     partial_publications: results.filter((item) => item.publication_status === "partial").length,
     failed_publications: results.filter((item) => item.publication_status === "failed").length,
     readiness_errors: results.filter((item) => item.error).length,
