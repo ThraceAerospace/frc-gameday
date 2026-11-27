@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeFieldViewEventSnapshot } from "../dist/normalization/event-snapshot.js";
+import { normalizeFieldViewEventState } from "../dist/normalization/event-state.js";
 
 const sources = {
   event: { tba_event: { status: "available", retrieved_at: "2026-11-17T12:00:00.000Z" } },
@@ -70,7 +70,7 @@ test("preserves not-acquired resources separately from explicit null and empty r
   assert.deepEqual(empty.event_teams, []);
 });
 
-test("event snapshot survives JSON transport round-trip without losing provenance", () => {
+test("EventState survives JSON transport round-trip without losing provenance", () => {
   const snapshot = normalizeFieldViewEventSnapshot({
     event_key: "2026test",
     tba_event: { key: "2026test", timezone: "America/New_York" },
