@@ -7,10 +7,7 @@ import type {
   FieldViewMatchAnalysis,
   FieldViewMatchFlags,
 } from "@fieldview/domain";
-import type { EventRealtimeTransport } from "./EventState";
-import type { EventWebSocketMessage, EventWebSocketStatus } from "@/lib/realtime/client";
-
-type MessageHandler = (message: EventWebSocketMessage) => void;
+type EventWebSocketStatus = "connecting" | "connected" | "disconnected";
 type StatusHandler = (status: EventWebSocketStatus) => void;
 export type CanonicalEventSnapshotData = {
   /** Event-owned state remains distinct from independently owned team-event states. */
@@ -136,7 +133,6 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectDelay = 1_000;
-  private readonly handlers = new Map<string, Set<MessageHandler>>();
   private readonly snapshotHandlers = new Map<string, Set<SnapshotHandler>>();
   private readonly analyticsHandlers = new Map<string, Set<AnalyticsHandler>>();
   private readonly analyticsPublications = new Map<string, CanonicalAnalyticsPublication>();
@@ -162,31 +158,6 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     this.stopIfIdle();
   }
 
-  subscribe(eventKey: string, handler: MessageHandler): () => void {
-    if (!eventKey) return () => {};
-    let handlers = this.handlers.get(eventKey);
-    if (!handlers) {
-      handlers = new Set();
-      this.handlers.set(eventKey, handlers);
-    }
-    const first = !this.hasEventStateSubscription(eventKey);
-    handlers.add(handler);
-    this.disposed = false;
-    this.ensureConnected();
-    if (first) this.sendSubscription("event-state", eventKey, true);
-
-    return () => {
-      const current = this.handlers.get(eventKey);
-      if (!current) return;
-      current.delete(handler);
-      if (current.size === 0) this.handlers.delete(eventKey);
-      if (!this.hasEventStateSubscription(eventKey)) {
-        this.sendSubscription("event-state", eventKey, false);
-      }
-      this.stopIfIdle();
-    };
-  }
-
   subscribeCanonicalSnapshot(eventKey: string, handler: SnapshotHandler): () => void {
     if (!eventKey || !this.runtimeBaseUrl) return () => {};
     let handlers = this.snapshotHandlers.get(eventKey);
@@ -194,8 +165,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       handlers = new Set();
       this.snapshotHandlers.set(eventKey, handlers);
     }
-    const hadSubscription = this.hasEventStateSubscription(eventKey);
-    const first = !hadSubscription;
+    const first = (this.snapshotHandlers.get(eventKey)?.size ?? 0) === 0;
     handlers.add(handler);
     const cached = this.snapshots.get(eventKey);
     if (cached) queueMicrotask(() => { if (handlers?.has(handler)) handler(cached); });
@@ -212,7 +182,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       if (!current) return;
       current.delete(handler);
       if (current.size === 0) this.snapshotHandlers.delete(eventKey);
-      if (!this.hasEventStateSubscription(eventKey)) {
+      if ((this.snapshotHandlers.get(eventKey)?.size ?? 0) === 0) {
         this.sendSubscription("event-state", eventKey, false);
       }
       this.stopIfIdle();
@@ -271,13 +241,8 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     return () => this.statusHandlers.delete(handler);
   }
 
-  private hasEventStateSubscription(eventKey: string): boolean {
-    return (this.handlers.get(eventKey)?.size ?? 0) > 0 ||
-      (this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0;
-  }
-
   private activeEventKeys(): Set<string> {
-    return new Set([...this.handlers.keys(), ...this.snapshotHandlers.keys()]);
+    return new Set(this.snapshotHandlers.keys());
   }
 
   private ensureConnected() {
@@ -293,12 +258,12 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
     if (!location) return;
 
     this.setStatus("connecting");
-    const socketUrl = this.runtimeBaseUrl
-      ? new URL("/stream", this.runtimeBaseUrl)
-      : new URL(
-        `${location.protocol === "https:" ? "wss:" : "ws:"}//${process.env.NEXT_PUBLIC_REMOTE_WEBSOCKET_URL || location.host}/api/ws`,
-      );
-    if (this.runtimeBaseUrl) socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
+    if (!this.runtimeBaseUrl) {
+      this.setStatus("disconnected");
+      return;
+    }
+    const socketUrl = new URL("/stream", this.runtimeBaseUrl);
+    socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
     const socket = new WebSocket(socketUrl.toString());
     this.socket = socket;
 
@@ -322,16 +287,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       if (this.socket !== socket) return;
       try {
         const raw = JSON.parse(String(event.data)) as Record<string, unknown>;
-        if (this.runtimeBaseUrl) {
-          this.handleRuntimeMessage(raw);
-        } else {
-          const message = raw as EventWebSocketMessage;
-          if (message.eventKey) {
-            for (const handler of this.handlers.get(message.eventKey) ?? []) handler(message);
-          } else {
-            for (const handlers of this.handlers.values()) for (const handler of handlers) handler(message);
-          }
-        }
+        this.handleRuntimeMessage(raw);
       } catch (error) {
         console.error("[SharedEventWorker] Invalid WebSocket message", error);
       }
@@ -349,7 +305,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       this.heartbeatTimer = null;
       this.setStatus("disconnected");
       if (this.disposed ||
-          (this.leases === 0 && this.handlers.size === 0 && this.snapshotHandlers.size === 0 && this.analyticsHandlers.size === 0) ||
+          (this.leases === 0 && this.snapshotHandlers.size === 0 && this.analyticsHandlers.size === 0) ||
           this.reconnectTimer !== null) return;
       const delay = this.reconnectDelay;
       this.reconnectTimer = setTimeout(() => {
@@ -455,12 +411,6 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
       this.acknowledgedSubscriptions.add("event-state:" + eventKey);
       const version = Number.isSafeInteger(message.version) && (message.version as number) >= 0
         ? message.version as number : undefined;
-      const eventMessage: EventWebSocketMessage = {
-        type: "snapshot.changed",
-        eventKey,
-        ...(version === undefined ? {} : { version }),
-      };
-      for (const handler of this.handlers.get(eventKey) ?? []) handler(eventMessage);
       if ((this.snapshotHandlers.get(eventKey)?.size ?? 0) > 0) {
         const envelopeValid = message.protocol === 1 && message.schema_version === 1 &&
           message.resource === "event-snapshot" &&
@@ -642,7 +592,7 @@ class WorkerEventWebSocket implements EventRealtimeTransport {
   }
 
   private stopIfIdle() {
-    if (this.leases > 0 || this.handlers.size > 0 || this.snapshotHandlers.size > 0 || this.analyticsHandlers.size > 0) return;
+    if (this.leases > 0 || this.snapshotHandlers.size > 0 || this.analyticsHandlers.size > 0) return;
     this.stop();
   }
 
