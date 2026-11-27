@@ -1,54 +1,55 @@
-# Cloudflare Workload Allocation
+# Cloudflare workload allocation
 
-**Status:** Current target architecture  
-**Deployment:** Not yet deployed; Preview integration testing is pending.
+**Status:** Target architecture  
+**Deployment:** Production cutover follows the integration gate in [MIGRATION-PLAN.md](MIGRATION-PLAN.md).
 
 ## Deployment boundary
 
-FieldView uses one environment-neutral Cloudflare Worker named `runtime`, configured only by `workers/fieldview/wrangler.toml`. The entrypoint composes Runtime HTTP/WebSocket routes and Workflow entrypoints. There are no split Runtime/Jobs Workers and no Wrangler named environments. Cloudflare Worker Preview URLs use isolated Preview bindings from the same configuration.
+FieldView uses one environment-neutral Cloudflare Worker named `runtime`, configured by `workers/fieldview/wrangler.toml`. Its entrypoint composes Runtime HTTP/WebSocket routes, webhook ingress, Durable Object classes, Cron handling, and Workflow entrypoints. Branch and pull-request validation uses Workers Preview URLs and Preview bindings from the same configuration. Wrangler named environments and split Runtime/Jobs Workers are not used.
 
 ## Resource ownership
 
 | Resource | Responsibility | Must not own |
 |---|---|---|
-| EventRuntime Durable Object | Event provider endpoint records, validators, reconciliation, ephemeral EventState projection, event snapshot/analytics publication | Provider scheduling, recurring alarms, team-owned state |
-| TeamRuntime Durable Object | Team-season provider endpoint records, validators, TeamState projection, team-event analytics inputs/results | Event-wide provider state or polling schedules |
-| Multiplexer Durable Object | Canonical event snapshot and analytics subscription coordination | Provider acquisition or canonical data storage |
+| EventRuntime Durable Object | Event provider endpoint records, validators, reconciliation, event-owned canonical facts, read-time EventState projection, event-wide analytics ownership | Provider scheduling, recurring alarms, team-owned canonical state |
+| TeamRuntime Durable Object | Team/year provider endpoint records, validators, reconciliation, team-owned canonical facts, read-time TeamState projection, team-event and team analytics ownership | Event-wide provider state or polling schedules |
+| Multiplexer Durable Object | Single public `/stream` WebSocket and subscription coordination; forwards transient data-bearing messages | Provider acquisition or canonical snapshot storage |
 | RemoteSessionRuntime Durable Object | Pairing-scoped WebRTC signaling over hibernatable WebSockets | Redis presence, heartbeat loops, alarm polling |
-| D1 | Discovery directories and operational/system records | Provider endpoint payloads or materialized event/team snapshots |
+| D1 | Discovery directories and operational/system records | Runtime provider endpoint payloads or persisted EventState/TeamState |
 | KV | Small, non-authoritative projections and canonical pointers | Authoritative provider data |
-| Workflows | Season discovery, event/team readiness and bootstrap, polling coordination, analytics, coverage, and admin jobs | Long-lived canonical provider storage |
+| Workflows | Season discovery, first-registration runtime initialization/bootstrap, season ingestion, polling orchestration, analytics, and admin jobs | Recurring provider proxy or long-lived canonical provider storage |
 | Worker Static Assets | Runtime admin dashboard | Application data |
 
-No R2 bucket or binding is part of the target. No Cloudflare Queue producer or consumer is part of the target. There are no Durable Object alarm handlers or alarm-driven polling loops.
+There is no R2 bucket/binding, Redis service, Cloudflare Queue refresh path, or Durable Object alarm polling.
 
 ## Provider data lifecycle
 
 1. Discovery Workflows resolve the canonical season and acquire event/team directories.
-2. Readiness Workflows register discovered runtime identities and inspect endpoint-resource readiness.
-3. Missing endpoint resources are acquired through provider adapters and imported into EventRuntime or TeamRuntime.
-4. The polling coordinator schedules subsequent refreshes according to event/team lifecycle and provider intervals.
-5. Explicit webhook reconciliation updates affected endpoint records and publishes scoped changes.
-6. Reads construct normalized EventState/TeamState from the stored endpoint records. A matching in-memory projection may accelerate the read. The current implementation does not persist normalized projections.
-7. A cold read or cache miss rebuilds the projection without writing Durable Object storage or triggering provider requests.
+2. First-registration initialization Workflows register new runtime identities and may perform one bounded provider acquisition to hydrate the corresponding EventRuntime or TeamRuntime.
+3. Bootstrap imports provider endpoint records and acquisition metadata only. It does not generate or persist EventState or TeamState.
+4. Once initialized, the owning runtime performs all ongoing provider requests in response to explicit refresh commands.
+5. The polling coordinator selects due runtime identities, applies lifecycle policy and concurrency budgets, and dispatches commands. It does not fetch provider data.
+6. Authenticated webhook reconciliation routes changes to the owning runtime.
+7. Reads construct normalized EventState/TeamState from stored endpoint records. A matching in-memory projection may accelerate the read; the projection is disposable and reads perform no storage writes or provider requests.
 
 ## Scheduling and backpressure
 
-The Worker cron handler starts Workflows. The polling coordinator selects due resources, applies bounded concurrency and provider request spacing, and dispatches explicit refresh commands. Workflow retries own durable retry behavior. Direct bounded dispatch is the current model; no queue is retained as a migration fallback.
+Worker Cron triggers start coordinator Workflows. The coordinator selects eligible targets, applies bounded concurrency and provider request spacing, and dispatches explicit refresh commands. Runtime-local refresh logic owns provider requests, validators, reconciliation, persistence, and publication. Direct bounded dispatch is the default; no Queue or Durable Object alarm is retained as a fallback.
 
 ## Realtime and webhook paths
 
-- Browser: initial canonical snapshot request, then Worker `/stream`; the browser SharedWorker multiplexes tabs.
-- EventRuntime: publishes versioned snapshot and analytics changes through Multiplexer.
-- TBA: posts signed webhook payloads directly to `POST /webhooks/tba`.
-- Remote display: uses RemoteSessionRuntime `/remote/ws` for WebRTC signaling.
+- Browser: canonical HTTP snapshot first, then the single Worker `/stream` connection through SharedWorker.
+- Runtime publication: changed EventState snapshot or team-event patch/data plus identity/revision metadata; analytics sends its committed publication.
+- Client: applies ordered data-bearing updates in memory; no notification, gap, or reconnect triggers an HTTP refetch.
+- TBA: signed webhook payloads enter directly at `POST /webhooks/tba`.
+- Remote display: uses RemoteSessionRuntime for WebRTC signaling.
 
 There is no Vercel WebSocket route, Redis Pub/Sub, Vercel webhook relay, or web-side provider acquisition.
 
-## Cost and operational constraints
+## Operational constraints
 
-- Avoid read-triggered DO writes. Snapshot and analytics-input GET paths are storage-read-only.
-- Do not add DO alarms or self-polling.
+- Keep snapshot and analytics-input GET paths free of Durable Object writes.
+- Do not add alarm polling or runtime self-polling.
 - Keep provider request concurrency and request spacing bounded.
-- Monitor DO row writes, D1 operations, KV operations, Workflow duration/retries, and provider freshness.
+- Monitor Durable Object writes, D1/KV operations, Workflow duration/retries, and provider freshness.
 - Do not add paid resources or a payment-method-dependent resource without explicit approval.
