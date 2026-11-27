@@ -247,8 +247,8 @@ export class SeasonStatusResolverWorkflow extends WorkflowEntrypoint<SeasonEnvir
 
 export async function consumeSeasonRefreshQueue(batch: QueueBatchLike, env: SeasonEnvironment): Promise<void> {
   // A consumer invocation may contain multiple queue messages. Track stable
-  // entity-season task identities across the whole invocation so duplicate
-  // messages in the same batch are visible and do not dispatch twice.
+  // entity-season task identities across the whole invocation so repeated
+  // entity-season work is visible in logs without suppressing readiness checks.
   const seenTaskIds = new Set<string>();
 
   for (let messageIndex = 0; messageIndex < batch.messages.length; messageIndex += 1) {
