@@ -8,7 +8,7 @@ FieldView is a data application for FIRST Robotics Competition. It acquires upst
 - **Runtime:** one environment-neutral Cloudflare Worker named `runtime`, implemented in `workers/fieldview` and configured by its single `wrangler.toml`. Production uses top-level configuration. Branch and pull-request validation uses Cloudflare Workers Preview URLs and Preview bindings, not Wrangler named environments.
 - **Runtime ownership:** one EventRuntime Durable Object owns each event; one TeamRuntime owns each team. Each runtime owns its provider requests, validators, endpoint records, reconciliation, persistence, freshness, and publications for its scope.
 - **Durable provider data:** provider endpoint responses and acquisition metadata are the canonical durable inputs. EventState and TeamState are normalized, client-facing projections built from those records when read; they are not persisted.
-- **Initialization:** a Workflow may perform one bounded, one-time provider acquisition when a runtime is first registered/created. This bootstrap exists to reliably hydrate a new runtime. Once initialized, ongoing provider acquisition is performed by the owning runtime in response to explicit commands dispatched by the polling coordinator or other approved operations.
+- **Initialization:** a Workflow may perform a one-time, bounded provider acquisition when a runtime is first registered/created, to ensure reliable initial hydration. After bootstrap, provider acquisition and refresh belong to the owning runtime.
 - **Reads:** public snapshot reads are read-only. They do not fetch providers, start workflows, mutate readiness, or write Durable Object storage. A cold read derives the projection from durable provider endpoint records; an optional in-memory projection cache is disposable.
 - **Orchestration:** Cloudflare Workflows own durable multi-step jobs such as discovery, first-time runtime initialization, season ingestion, analytics, and administrative operations. The Worker-level polling coordinator selects eligible runtime identities and dispatches bounded refresh commands; it does not proxy provider requests.
 - **Realtime:** clients obtain an HTTP snapshot first, then subscribe through the single Multiplexer-owned `/stream` WebSocket. Notifications carry the changed state data (or the committed analytics publication), not merely a revision/invalidation. The SharedWorker applies ordered updates in memory. Notifications, gaps, and reconnects do not trigger hidden HTTP refetches.
@@ -18,14 +18,13 @@ FieldView is a data application for FIRST Robotics Competition. It acquires upst
 
 ## Repository layout
 
-- `apps/web` — Next.js frontend and browser-side clients.
+- `apps/web` — Next.js frontend and reusable UI/domain consumers.
 - `apps/admin-cloudflare` — Cloudflare Worker admin asset build.
 - `workers/fieldview/src/runtime` — HTTP routing, Durable Objects, provider-resource ownership, snapshot projection, realtime multiplexing, webhook ingress, and remote sessions.
 - `workers/fieldview/src/jobs` — Workflows, discovery/season orchestration, polling coordination, analytics jobs, and runtime initialization.
-- `packages/domain` — canonical FieldView domain model and normalization.
-- `packages/contracts` — serializable client-facing contracts.
+- `packages/domain` — canonical FieldView domain objects, normalized client-facing contracts, and domain rules.
 - `packages/providers/*` — provider clients, generated schemas, and transport-specific behavior.
-- `packages/analytics` — provider- and UI-independent analytics calculations.
+- `packages/analytics` — reusable analytics calculations independent of UI and runtime transport.
 
 ## Local development
 
