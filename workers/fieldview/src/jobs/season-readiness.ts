@@ -231,7 +231,7 @@ async function runSeasonReadiness(
   };
   const resultChunks = Math.ceil(results.length / 100);
   const completed = {
-    ...initial, status: summary.readiness_errors ? "completed_with_errors" : "completed",
+    ...initial, status: summary.readiness_errors || summary.failed_publications ? "completed_with_errors" : "completed",
     updated_at: Date.now(), completed_at: Date.now(), total: results.length,
     result_chunks: resultChunks, summary, error: null,
   };
