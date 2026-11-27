@@ -81,6 +81,60 @@ async function listRuntimeRegistry(bucket: DiscoveryServiceClient, kind: "event"
   return keys.sort();
 }
 
+
+/**
+ * Discovery owns first-time Durable Object registration. Existing markers are
+ * read once; only missing identities receive a DO initialization request and a
+ * corresponding discovery marker. Registration binds identity only—it never
+ * acquires provider data or schedules background work.
+ */
+async function registerDiscoveredRuntimes(
+  env: JobsEnvironment,
+  bucket: DiscoveryServiceClient,
+  step: WorkflowStep,
+  kind: "event" | "team",
+  keys: string[],
+  operationPrefix: string,
+): Promise<{ registered: number; initialized: number }> {
+  const namespace = kind === "event" ? env.EVENT_RUNTIME : env.TEAM_RUNTIME;
+  if (!namespace) throw new Error(kind + " runtime namespace is unavailable");
+  const markerPrefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+  const existing = new Set(await step.do(operationPrefix + "-read-registration-markers", async () =>
+    listRuntimeRegistry(bucket, kind)));
+  const validKeys = [...new Set(keys)].filter((key) =>
+    kind === "event" ? /^[a-zA-Z0-9_-]+$/.test(key) : /^frc[0-9]+$/.test(key));
+  const missing = validKeys.filter((key) => !existing.has(key));
+  let initialized = 0;
+  for (let offset = 0; offset < missing.length; offset += 25) {
+    const chunk = missing.slice(offset, offset + 25);
+    await step.do(operationPrefix + "-initialize-" + String(offset / 25).padStart(4, "0"), async () => {
+      let count = 0;
+      for (const key of chunk) {
+        const stub = namespace.get(namespace.idFromName(key));
+        const identityHeader = kind === "event" ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key";
+        const response = await stub.fetch(new Request("https://" + kind + "-runtime/register", {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+            [identityHeader]: key,
+          },
+        }));
+        if (!response.ok) {
+          throw new Error(kind + " runtime registration failed for " + key + " with HTTP " +
+            response.status + ": " + (await response.text()).slice(0, 300));
+        }
+        await bucket.put(markerPrefix + key + ".json", "{}", {
+          httpMetadata: { contentType: "application/json" },
+        });
+        count += 1;
+      }
+      return { initialized: count };
+    });
+    initialized += chunk.length;
+  }
+  return { registered: validKeys.length, initialized };
+}
+
 async function readPublishedSeason(bucket: DiscoveryServiceClient, year: number): Promise<{
   events: TbaEvent[];
   eventUpdatedAt: number;
@@ -277,6 +331,15 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         if (!response.ok) throw new Error("Discovery service team directory publication returned HTTP " + response.status);
         return response.json() as Promise<{ status: "completed" | "partial"; complete: boolean }>;
       });
+      if (publication.complete) {
+        await registerDiscoveredRuntimes(this.env, createDiscoveryServiceClient(this.env), step,
+          "team", uniqueTeamKeys, "manual-discovery-team-runtime-registration");
+      }
+      const publishedEvents = await readJson<DiscoveryDocument>(
+        createDiscoveryServiceClient(this.env), `discovery/events/${season}.json`);
+      await registerDiscoveredRuntimes(this.env, createDiscoveryServiceClient(this.env), step,
+        "event", (publishedEvents?.events ?? []).map((item) => item.key),
+        "manual-discovery-event-runtime-registration");
       const partial = publication.status === "partial";
       const summary = {
         year: season, mode: "year", workflow_id: jobId, status: partial ? "partial" : "completed",
@@ -417,6 +480,9 @@ export class DailyEventReadinessWorkflow extends SeasonDiscoveryWorkflowBase {
       });
       eventKeys.push(...directory.events);
     }
+
+    await registerDiscoveredRuntimes(this.env, store(), step, "event",
+      eventKeys.map((item) => item.key), "readiness-event-runtime-registration");
 
     const registeredEventKeys = new Set(await step.do(
       "readiness-list-registered-event-runtimes",
@@ -581,6 +647,9 @@ export class DailyTeamReadinessWorkflow extends WorkflowEntrypoint<JobsEnvironme
       if (!response.ok) throw new Error("Team directory publication returned HTTP " + response.status);
       return response.json();
     });
+
+    await registerDiscoveredRuntimes(this.env, store(), step, "team",
+      uniqueTeamKeys, "team-readiness-runtime-registration");
 
     const registeredTeamKeys = new Set(await step.do(
       "team-readiness-list-registered-team-runtimes",

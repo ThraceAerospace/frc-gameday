@@ -43,3 +43,19 @@ test("event analytics acknowledges team results only after EventRuntime publicat
   assert.ok(source.includes('scheduleRetry("team-publication-acknowledgement-conflict", null)'),
     "stale acknowledgements must trigger a full revision-consistent recompute");
 });
+
+test("discovery initializes missing event and team Durable Objects before readiness inspection", async () => {
+  const jobs = await readFile(path.join(sourceRoot, "jobs", "index.ts"), "utf8");
+  const eventRuntime = await readFile(path.join(sourceRoot, "runtime", "event-runtime.ts"), "utf8");
+  const teamRuntime = await readFile(path.join(sourceRoot, "runtime", "team-runtime.ts"), "utf8");
+  assert.match(jobs, /async function registerDiscoveredRuntimes\(/);
+  assert.match(jobs, /registry\\/runtime-events\\//);
+  assert.match(jobs, /registry\\/runtime-teams\\//);
+  assert.match(jobs, /manual-discovery-event-runtime-registration/);
+  assert.match(jobs, /readiness-event-runtime-registration/);
+  assert.match(jobs, /team-readiness-runtime-registration/);
+  assert.match(eventRuntime, /url\.pathname === "\/register"/);
+  assert.match(teamRuntime, /url\.pathname === "\/register"/);
+  const registration = jobs.slice(jobs.indexOf("async function registerDiscoveredRuntimes"), jobs.indexOf("async function readPublishedSeason"));
+  assert.doesNotMatch(registration, /setAlarm|deleteAlarm|refresh\(/);
+});

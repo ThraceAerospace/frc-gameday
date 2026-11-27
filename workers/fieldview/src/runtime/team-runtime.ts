@@ -222,6 +222,11 @@ export class TeamRuntime {
     } else {
       if (!(await this.bindTeamKey(request))) return Response.json({ error: "Invalid or mismatched team identity" }, { status: 400 });
     }
+    if (request.method === "POST" && url.pathname === "/register") {
+      return Response.json({ team_key: this.teamKey, registered: true }, {
+        headers: { "Cache-Control": "no-store" },
+      });
+    }
     const yearText = url.searchParams.get("year") ?? (url.pathname === "/event-state" ? url.searchParams.get("event_key")?.slice(0, 4) ?? null : null);
     const year = yearText === null ? await this.currentSeasonYear() : Number(yearText);
     if (year === null) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
