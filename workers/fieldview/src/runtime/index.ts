@@ -1011,7 +1011,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     if (url.pathname === "/remote/ws" && request.method === "GET") {
       if (!env.REMOTE_SESSION) return Response.json({ error: "Remote session runtime is not bound" }, { status: 503 });
       const code = url.searchParams.get("code") ?? "";
-      if (!/^\\d{6}$/.test(code)) return Response.json({ error: "Invalid pairing code" }, { status: 400 });
+      if (!/^\d{6}$/.test(code)) return Response.json({ error: "Invalid pairing code" }, { status: 400 });
       const stub = env.REMOTE_SESSION.get(env.REMOTE_SESSION.idFromName(code));
       return stub.fetch(new Request("https://remote-session/connect" + url.search, {
         method: "GET", headers: request.headers,
