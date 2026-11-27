@@ -281,41 +281,6 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     );
 
 
-    // Team profiles are acquired from the complete TBA team directory, not
-    // only from teams that have appeared on an active event roster. The same
-    // rotating budget makes this a gradual one-time fill rather than a burst.
-    const initialTeamDirectory = await step.do("load-initial-team-acquisition-directory", async () =>
-      readJson<unknown>(store(), "registry/teams/" + discovery.year + ".json"),
-    );
-    const allDiscoveredTeamKeys = Array.isArray(initialTeamDirectory)
-      ? [...new Set(initialTeamDirectory.filter((key): key is string =>
-          typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
-      : [];
-    const initialTeamCandidates = selectBudgetedKeys(
-      allDiscoveredTeamKeys.filter((teamKey) => !participantTeamKeys.has(teamKey)),
-      MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
-      Math.floor(scheduledAt / (5 * 60_000)),
-    );
-    const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" } }, async () =>
-      mapLimit(initialTeamCandidates, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, async (teamKey) => {
-        if (!await isRuntimeRegistered(store(), "team", teamKey)) {
-          return { key: teamKey, status: "unregistered" as const };
-        }
-        const readiness = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
-        if (!readiness.ok) throw new Error("Initial TeamRuntime readiness failed for " + teamKey +
-          " with HTTP " + readiness.status);
-        const body = await readiness.json() as { state_valid?: unknown; refresh_required?: unknown };
-        if (body.state_valid === true) return { key: teamKey, status: "already_published" as const };
-        if (body.refresh_required !== true) {
-          return { key: teamKey, status: "not_ready" as const };
-        }
-        const outcome = await dispatchRuntimeRefresh(this.env, { kind: "team", key: teamKey, year: discovery.year });
-        if (!outcome.ok) throw new Error("Initial TeamRuntime acquisition failed for " + teamKey +
-          ": " + (outcome.error ?? "refresh failed"));
-        return { key: teamKey, status: "acquired" as const };
-      }),
-    );
-
     const results: PollingEventResult[] = [];
     const participantTeamKeys = new Set<string>();
     const eventAnalyticsRequests = new Map<string, EventAnalyticsRefreshRequest>();
@@ -441,6 +406,41 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       results.push(result);
       for (const teamKey of result.participant_team_keys ?? []) participantTeamKeys.add(teamKey);
     }
+
+    // Team profiles are acquired from the complete TBA team directory, not
+    // only from teams that have appeared on an active event roster. The same
+    // rotating budget makes this a gradual one-time fill rather than a burst.
+    const initialTeamDirectory = await step.do("load-initial-team-acquisition-directory", async () =>
+      readJson<unknown>(store(), "registry/teams/" + discovery.year + ".json"),
+    );
+    const allDiscoveredTeamKeys = Array.isArray(initialTeamDirectory)
+      ? [...new Set(initialTeamDirectory.filter((key): key is string =>
+          typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
+      : [];
+    const initialTeamCandidates = selectBudgetedKeys(
+      allDiscoveredTeamKeys.filter((teamKey) => !participantTeamKeys.has(teamKey)),
+      MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
+      Math.floor(scheduledAt / (5 * 60_000)),
+    );
+    const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" } }, async () =>
+      mapLimit(initialTeamCandidates, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, async (teamKey) => {
+        if (!await isRuntimeRegistered(store(), "team", teamKey)) {
+          return { key: teamKey, status: "unregistered" as const };
+        }
+        const readiness = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
+        if (!readiness.ok) throw new Error("Initial TeamRuntime readiness failed for " + teamKey +
+          " with HTTP " + readiness.status);
+        const body = await readiness.json() as { state_valid?: unknown; refresh_required?: unknown };
+        if (body.state_valid === true) return { key: teamKey, status: "already_published" as const };
+        if (body.refresh_required !== true) {
+          return { key: teamKey, status: "not_ready" as const };
+        }
+        const outcome = await dispatchRuntimeRefresh(this.env, { kind: "team", key: teamKey, year: discovery.year });
+        if (!outcome.ok) throw new Error("Initial TeamRuntime acquisition failed for " + teamKey +
+          ": " + (outcome.error ?? "refresh failed"));
+        return { key: teamKey, status: "acquired" as const };
+      }),
+    );
 
     // Reconcile TeamRuntime results that were calculated but never acknowledged
     // after EventRuntime publication. This scan is bounded and rotates across the
