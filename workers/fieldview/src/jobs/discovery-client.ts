@@ -23,13 +23,13 @@ export function createDiscoveryServiceClient(env: RuntimeEnvironment): Discovery
     },
     async list(options = {}) {
       const prefix = options.prefix ?? "";
+      const limit = options.limit ?? 1000;
       const entries = await service.listRecords({
         prefix,
         ...(options.cursor ? { startAfter: options.cursor } : {}),
-        limit: options.limit ?? 1000,
+        limit: limit + 1,
       });
       const keys = [...entries.keys()];
-      const limit = options.limit ?? 1000;
       const truncated = keys.length > limit;
       const page = keys.slice(0, limit);
       return { keys: page, truncated, ...(truncated && page.length ? { cursor: page[page.length - 1] } : {}) };
