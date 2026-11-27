@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { FieldViewTeamAnalytics } from "@fieldview/domain";
+import type { FieldViewTeamEventAnalytics } from "@fieldview/domain";
 
 type AnalysisEvent = {
   event: { key: string; name: string; shortName: string | null; startDate: string };
@@ -44,7 +44,14 @@ export default function TeamProfileTabs({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetch(`/api/team/${teamNumber}/matches?year=${year}`, { cache: "no-store" })
+    const runtimeOrigin = process.env.NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL;
+    if (!runtimeOrigin) {
+      setError("FieldView runtime is not configured");
+      setLoading(false);
+      return;
+    }
+    const url = new URL(`/teams/frc${teamNumber}/season-analytics?year=${year}`, runtimeOrigin);
+    fetch(url, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) {
           const body = await response.json().catch(() => null);
