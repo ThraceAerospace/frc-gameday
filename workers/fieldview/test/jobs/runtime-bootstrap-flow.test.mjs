@@ -60,11 +60,18 @@ test("both Durable Objects bootstrap provider resources without materializing cl
 
 
 test("client state projections are optional and snapshot reads never persist them", () => {
-  const eventProjectionStart = eventRuntime.indexOf("private async publishEventState()");
+  const eventProjectionStart = eventRuntime.indexOf("private async getEventStateProjection()");
   const eventProjectionEnd = eventRuntime.indexOf("private async recalculateAnalytics(", eventProjectionStart);
   const eventProjection = eventRuntime.slice(eventProjectionStart, eventProjectionEnd);
   assert.ok(eventProjectionStart >= 0 && eventProjectionEnd > eventProjectionStart);
   assert.doesNotMatch(eventProjection, /storage\.(put|delete)|transaction\(async/);
+  const publicationStart = eventRuntime.indexOf("private async publishSnapshotRevision(");
+  const publicationEnd = eventRuntime.indexOf("\n  }", publicationStart) + 4;
+  const publication = eventRuntime.slice(publicationStart, publicationEnd);
+  assert.ok(publicationStart >= 0 && publicationEnd > publicationStart);
+  assert.match(publication, /change: "snapshot"/);
+  assert.doesNotMatch(publication, /getEventStateProjection|EventStateProjection/,
+    "provider updates publish revisions without constructing a client EventState");
 
   const teamProjectionStart = teamRuntime.indexOf("private async snapshot(year:");
   const teamProjectionEnd = teamRuntime.indexOf("private async pollResourceNow(", teamProjectionStart);
