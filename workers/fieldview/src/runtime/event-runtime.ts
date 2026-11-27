@@ -544,7 +544,7 @@ export class EventRuntime extends DurableObjectBase {
       // to the queue consumer while retaining the last-good publication.
       // Provider 404s remain unavailable (not retryable) because many event
       // resources legitimately do not exist until later in the season.
-      const failedEndpoints = endpointResults.filter((result) => Boolean(result.last_error) || result.status === "failed");
+      const failedEndpoints = endpointResults.filter((result) => !result.success && result.status !== "unavailable");
       const retryable = failedEndpoints.length > 0;
       const responseBody = {
         event_key: this.eventKey,
