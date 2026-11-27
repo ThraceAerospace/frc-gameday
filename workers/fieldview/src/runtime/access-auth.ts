@@ -7,6 +7,8 @@ interface AccessEnvironment {
   CF_ACCESS_TEAM_DOMAIN?: string;
   CF_ACCESS_AUD?: string;
   RUNTIME_ADMIN_EMAILS?: string;
+  /** Explicit Wrangler-local bypass; never configured in deployed Worker vars. */
+  LOCAL_ADMIN_AUTH?: string;
   fetcher?: typeof fetch;
 }
 
@@ -134,11 +136,27 @@ async function verifySignature(
  * issuer/audience match this app and whose email is in the explicit allowlist.
  * Missing configuration and every verification/network error fail closed.
  */
+function isExplicitLocalAdminRequest(request: Request, env: AccessEnvironment): boolean {
+  if (env.LOCAL_ADMIN_AUTH?.trim().toLowerCase() !== "true") return false;
+  try {
+    const url = new URL(request.url);
+    return url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]");
+  } catch {
+    return false;
+  }
+}
+
 export async function isCloudflareAccessAdmin(
   request: Request,
   env: AccessEnvironment,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): Promise<boolean> {
+  // Wrangler's [dev.vars] is local-only. Keep the bypass constrained to an
+  // explicitly enabled, plain-HTTP loopback request; deployed hosts still
+  // require a signed Cloudflare Access JWT and the administrator allowlist.
+  if (isExplicitLocalAdminRequest(request, env)) return true;
+
   const issuer = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
   const audience = env.CF_ACCESS_AUD?.trim();
   const allowlist = configuredAdminEmails(env.RUNTIME_ADMIN_EMAILS);
