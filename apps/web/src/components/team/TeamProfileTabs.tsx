@@ -6,7 +6,7 @@ import type { FieldViewTeamEventAnalytics } from "@fieldview/domain";
 type AnalysisEvent = {
   event: { key: string; name: string; shortName: string | null; startDate: string };
   status: "ready" | "pending" | "unavailable";
-  analytics: FieldViewTeamAnalytics | null;
+  analytics: FieldViewTeamEventAnalytics | null;
 };
 type AnalysisResponse = {
   team: number;
