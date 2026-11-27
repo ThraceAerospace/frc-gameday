@@ -250,8 +250,10 @@ export class TeamRuntime extends DurableObjectBase {
         if (previous?.bootstrap_id === body.bootstrap_id) return { ...previous, duplicate: true };
         if (previous && previous.acquired_at > body.acquired_at) return null;
         const existing = await Promise.all(body.resources.map((resource) => tx.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint))));
-        if (existing.some((resource) => resource?.lastFetchedAt !== null && resource?.lastFetchedAt !== undefined &&
-            (resource.lastFetchedAt > body.acquired_at || (resource.lastWebhookAt !== null && resource.lastWebhookAt !== undefined && resource.lastWebhookAt > body.acquired_at)))) return null;
+        if (existing.some((resource) => Boolean(resource && (
+            (resource.lastFetchedAt !== null && resource.lastFetchedAt > body.acquired_at) ||
+            (resource.lastWebhookAt !== null && resource.lastWebhookAt > body.acquired_at)
+          )))) return null;
         for (const resource of body.resources) await tx.put(endpointKey(resource.endpoint), {
           ...resource, lastHttpStatus: resource.status === "available" ? 200 : null, lastError: null,
         });
