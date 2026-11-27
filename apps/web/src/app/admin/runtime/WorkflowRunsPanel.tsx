@@ -175,7 +175,7 @@ export default function WorkflowRunsPanel({ authenticated, year, requestedType }
   return (
     <section className="rounded-2xl border border-[var(--fv-border)] bg-[var(--fv-surface-raised)] p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div><h2 className="font-bold">Readiness workflows</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">Inspect independent season-wide discovery and runtime coverage; live refresh dispatch is handled separately.</p></div>
+        <div><h2 className="font-bold">Readiness workflows</h2><p className="mt-1 text-sm text-[var(--fv-muted)]">Acquire missing provider endpoint resources for each season. Client-facing EventState and TeamState are derived on read; ongoing refresh is coordinated separately.</p></div>
         <button onClick={() => void loadRuns().catch((cause) => setError(String(cause)))} className="rounded-lg border border-[var(--fv-border)] px-3 py-2 text-sm">Refresh history</button>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2">

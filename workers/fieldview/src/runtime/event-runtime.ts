@@ -595,10 +595,9 @@ export class EventRuntime extends DurableObjectBase {
       const analyticsAffectedTeamKeys = currentRevision !== previousRevision &&
         (affectedTeamKeys === undefined || (Array.isArray(affectedTeamKeys) && affectedTeamKeys.length === 0))
         ? null : affectedTeamKeys;
-      const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const publication = currentRevision !== previousRevision || !currentPublication
-        ? await this.publishEventState()
-        : currentPublication;
+      // Always refresh the in-memory projection after explicit provider work;
+      // a persisted EventState is optional and never gates a fresh read.
+      const publication = await this.publishEventState();
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const endpointResults = results.map((result) => {
         const state = entries.get(endpointStorageKey(result.endpoint)) as
@@ -687,10 +686,7 @@ export class EventRuntime extends DurableObjectBase {
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const success = await this.pollEndpoint(endpoint);
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const publication = currentRevision !== previousRevision || !currentPublication
-        ? await this.publishEventState()
-        : currentPublication;
+      const publication = await this.publishEventState();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       const diagnostic = state as (EndpointState<unknown> & { lastError?: string | null; lastHttpStatus?: number | null }) | undefined;
       return Response.json({
@@ -706,10 +702,7 @@ export class EventRuntime extends DurableObjectBase {
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
       const success = await this.pollEndpoint(endpoint);
       const currentRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const currentPublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const publication = currentRevision !== previousRevision || !currentPublication
-        ? await this.publishEventState()
-        : currentPublication;
+      const publication = await this.publishEventState();
       const state = await this.storage.get<EndpointState<unknown>>(endpointStorageKey(endpoint));
       return Response.json({
         scheduled: false, queued: false, attempted: true, success,
@@ -965,10 +958,9 @@ export class EventRuntime extends DurableObjectBase {
       const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
         total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
       const publication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
-      const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const eventStatePublished = Boolean(eventStatePublication && eventStatePublication.status !== "failed" &&
-        Number.isSafeInteger(eventStatePublication.snapshotVersion) && isRecord(eventStatePublication.state) &&
-        eventStatePublication.state.event_key === this.eventKey && isRecord(eventStatePublication.state.sources));
+      const eventProjection = await this.publishEventState();
+      const eventStatePublished = Boolean(Number.isSafeInteger(eventProjection.snapshotVersion) &&
+        eventProjection.state.event_key === this.eventKey && isRecord(eventProjection.state.sources));
       return Response.json({
         event_key: this.eventKey,
         event_state_published: eventStatePublished,
@@ -1025,9 +1017,9 @@ export class EventRuntime extends DurableObjectBase {
     if (request.method === "GET" && url.pathname === "/state") {
       const entries = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
       const analyticsPublication = await this.storage.get<AnalyticsPublication>(ANALYTICS_PUBLICATION_KEY);
-      const eventStatePublication = await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY);
-      const rosterAvailable = Array.isArray(eventStatePublication?.state.teams);
-      const expectedTeamCount = eventStatePublication?.state.teams?.length ?? 0;
+      const eventProjection = await this.publishEventState();
+      const rosterAvailable = Array.isArray(eventProjection.state.teams);
+      const expectedTeamCount = eventProjection.state.teams?.length ?? 0;
       const expectedEndpoints = [...eventResourceEndpoints(this.eventKey), STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
       const currentSourceRevision = expectedEndpoints.reduce((total, endpoint) =>
         total + (entries.get(endpointStorageKey(endpoint))?.revision ?? 0), 0);
@@ -1040,9 +1032,9 @@ export class EventRuntime extends DurableObjectBase {
         return !source || source.status === "failed" || source.status === "stale" ||
           (source.expiresAt !== null && source.expiresAt <= Date.now());
       });
-      const eventStateStatus = !eventStatePublication ? "missing"
-        : eventStatePublication.sourceRevision !== currentSourceRevision || hasStaleSources
-          ? "stale" : eventStatePublication.status;
+      const hasAnyResource = expectedEndpoints.some((endpoint) => entries.has(endpointStorageKey(endpoint)));
+      const eventStateStatus = !hasAnyResource && !rosterAvailable ? "missing"
+        : hasStaleSources ? "stale" : eventProjection.status;
       const storedAnalyticsStatus = await this.storage.get<string>("analytics:status") ?? (analyticsPublication ? "succeeded" : "pending");
       const analyticsStatus = analyticsPublication && analyticsPublication.sourceRevision !== currentSourceRevision
         ? "stale" : storedAnalyticsStatus;
@@ -1051,13 +1043,14 @@ export class EventRuntime extends DurableObjectBase {
         source_revision: currentSourceRevision,
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
-          hydrated_scope: ["event_identity", "event_state_publication"],
+          hydrated_scope: ["event_identity", "provider_endpoint_records"],
           event_state_publication: {
-            exists: Boolean(eventStatePublication),
+            exists: true,
+            materialized: Boolean(await this.storage.get<EventStatePublication>(EVENT_STATE_PUBLICATION_KEY)),
             status: eventStateStatus,
-            version: eventStatePublication?.snapshotVersion ?? null,
-            source_revision: eventStatePublication?.sourceRevision ?? null,
-            generated_at: eventStatePublication?.generatedAt ?? null,
+            version: eventProjection.snapshotVersion,
+            source_revision: eventProjection.sourceRevision,
+            generated_at: eventProjection.generatedAt,
           },
           polling_owner: "PollingCoordinatorWorkflow",
           local_poll_tasks: 0,
@@ -1065,8 +1058,8 @@ export class EventRuntime extends DurableObjectBase {
         },
         event_state: {
           status: eventStateStatus,
-          generated_at: eventStatePublication?.generatedAt ?? null,
-          source_revision: eventStatePublication?.sourceRevision ?? null,
+          generated_at: eventProjection.generatedAt,
+          source_revision: eventProjection.sourceRevision,
         },
         analytics: {
           revision: await this.storage.get<number>(ANALYTICS_REVISION_KEY) ?? 0,

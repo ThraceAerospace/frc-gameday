@@ -391,23 +391,8 @@ export class TeamRuntime extends DurableObjectBase {
       return this.snapshot(year, request);
     }
 
-    // Only explicit mutation commands may materialize TeamState. All GET
-    // inspection paths, readiness, and analytics-input reads/preparation stay
-    // outside this implicit initialization path.
-    const skipAutomaticInitialization = publicRead || publicSeasonAnalyticsRead || publicEventStateRead ||
-      diagnosticsRead || readinessRequest || pendingAnalyticsRead || analyticsSeasonInputRead || analyticsSeasonInputPrepare;
-    const currentYear = pendingAnalyticsRead ? null : await this.currentSeasonYear();
-    if (!skipAutomaticInitialization) {
-      let requestedYearInitialized = false;
-      if (currentYear !== null) {
-        const currentPublication = await this.storage.get<unknown>("team-state:" + currentYear + ":publication");
-        if (!currentPublication) {
-          await this.snapshot(currentYear);
-          requestedYearInitialized = currentYear === year;
-        }
-      }
-      if (!requestedYearInitialized) await this.snapshot(year);
-    }
+    // Client-facing TeamState is derived only when a route explicitly needs
+    // it. Registration and unrelated mutations do not synthesize initial state.
     if (publicEventStateRead) {
       const eventKey = url.searchParams.get("event_key") ?? "";
       if (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(eventKey)) return Response.json({ error: "Invalid event key" }, { status: 400 });
@@ -729,7 +714,6 @@ export class TeamRuntime extends DurableObjectBase {
         ...selected.filter((resource) => resource.endpoint !== historyEndpoint),
       ];
       const previousTeamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const previousPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const previousResourceRevisions = new Map<string, number>();
       for (const resource of prioritized) {
         const state = await this.storage.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint));
@@ -760,12 +744,9 @@ export class TeamRuntime extends DurableObjectBase {
         }
       }
       const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const teamStateChanged = teamStateRevision !== previousTeamStateRevision || !previousPublication;
-      let snapshot: unknown = previousPublication?.state ?? null;
-      if (teamStateChanged) {
-        const snapshotResponse = await this.snapshot(year);
-        snapshot = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
-      }
+      const teamStateChanged = teamStateRevision !== previousTeamStateRevision;
+      const snapshotResponse = await this.snapshot(year);
+      const snapshot: unknown = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
       const persistedEventStates = teamStateChanged
         ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
         : new Map<string, FieldViewTeamEventState>();
@@ -831,15 +812,11 @@ export class TeamRuntime extends DurableObjectBase {
       const resource = typeof endpoint === "string" ? this.endpoints(year).find((item) => item.endpoint === endpoint) : undefined;
       if (!resource) return Response.json({ error: "Resource endpoint is not part of this team and season" }, { status: 400 });
       const previousRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const previousPublication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
       const result = await this.pollResourceNow(resource);
       const teamStateRevision = await this.storage.get<number>("snapshot-revision") ?? 0;
-      const teamStateChanged = teamStateRevision !== previousRevision || !previousPublication;
-      let snapshot: unknown = previousPublication?.state ?? null;
-      if (teamStateChanged) {
-        const snapshotResponse = await this.snapshot(year);
-        snapshot = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
-      }
+      const teamStateChanged = teamStateRevision !== previousRevision;
+      const snapshotResponse = await this.snapshot(year);
+      const snapshot: unknown = snapshotResponse.status === 200 ? await snapshotResponse.json() : null;
       const persistedEventStates = teamStateChanged
         ? await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX })
         : new Map<string, FieldViewTeamEventState>();
@@ -897,11 +874,13 @@ export class TeamRuntime extends DurableObjectBase {
       return Response.json({ team_key: this.teamKey, snapshot_revision: snapshotRevision,
         readiness: {
           hydration: this.hydrationMode === "platform-barrier" ? "complete" : "storage-backed",
-          hydrated_scope: ["team_identity", "team_state_publications"],
+          hydrated_scope: ["team_identity", "provider_endpoint_records"],
           publications: [...this.publishedSnapshots.entries()].map(([year, publication]) => ({
             year, exists: true, input_signature: publication.input_signature,
             snapshot_revision: snapshotRevision,
           })),
+          projection_mode: "read-time",
+          materialized_cache_entries: this.publishedSnapshots.size,
           polling_owner: "PollingCoordinatorWorkflow",
           local_poll_tasks: 0,
           last_error: [...states.values()].find((state) => state.lastError)?.lastError ?? null,
