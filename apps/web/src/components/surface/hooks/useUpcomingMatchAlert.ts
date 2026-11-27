@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { FieldViewEventState } from "@fieldview/domain";
 import { getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 
@@ -21,7 +21,7 @@ function hasTrackedTeam(
 
 type Options = {
   eventKey: string;
-  snapshot: FieldViewEventSnapshot | undefined;
+  snapshot: FieldViewEventState | undefined;
   trackedTeams: string[];
   autoHighlight: boolean;
   actions: TileSurfaceActions;
