@@ -192,7 +192,7 @@ async function runSeasonReadiness(
   if (registered.length !== keys.length) throw new Error("Not all discovered " + kind + " runtimes were registered");
   const results: Array<{
     key: string; state_valid: boolean; refresh_required: boolean; queued: boolean;
-    bootstrapped: boolean; already_initialized?: boolean; publication_status?: string; error?: string;
+    bootstrapped: boolean; already_initialized?: boolean; resource_status?: string; error?: string;
   }> = [];
   for (let offset = 0; offset < registered.length; offset += 25) {
     const chunk = registered.slice(offset, offset + 25);
@@ -205,7 +205,7 @@ async function runSeasonReadiness(
           if (readinessResult.state_valid === true) {
             return {
               key, state_valid: true, refresh_required: false, queued: false,
-              bootstrapped: false, already_initialized: true, publication_status: "existing",
+              bootstrapped: false, already_initialized: true, resource_status: "existing",
             };
           }
           const bootstrapId = "season:" + workflowId + ":" + kind + ":" + year + ":" + key;
@@ -215,12 +215,12 @@ async function runSeasonReadiness(
             const detail = await response.text().catch(() => "");
             throw new Error("Bootstrap handoff returned HTTP " + response.status + (detail ? ": " + detail.slice(0, 180) : ""));
           }
-          const receipt = await response.json() as { publication_status?: string; accepted?: boolean };
+          const receipt = await response.json() as { resource_status?: string; accepted?: boolean };
           if (receipt.accepted !== true) throw new Error("Runtime did not confirm bootstrap acceptance");
-          const publicationStatus = receipt.publication_status ?? "unknown";
+          const resourceStatus = receipt.resource_status ?? "unknown";
           return {
-            key, state_valid: publicationStatus !== "failed", refresh_required: false, queued: false,
-            bootstrapped: true, already_initialized: false, publication_status: publicationStatus,
+            key, state_valid: resourceStatus !== "failed", refresh_required: false, queued: false,
+            bootstrapped: true, already_initialized: false, resource_status: resourceStatus,
           };
         } catch (error) {
           return {
@@ -238,13 +238,13 @@ async function runSeasonReadiness(
     bootstrapped: results.filter((item) => item.bootstrapped).length,
     already_initialized: results.filter((item) => item.already_initialized).length,
     bootstrap_failed: results.filter((item) => !item.bootstrapped && !item.already_initialized).length,
-    partial_publications: results.filter((item) => item.publication_status === "partial").length,
-    failed_publications: results.filter((item) => item.publication_status === "failed").length,
+    partial_resource_sets: results.filter((item) => item.resource_status === "partial").length,
+    failed_resource_sets: results.filter((item) => item.resource_status === "failed").length,
     readiness_errors: results.filter((item) => item.error).length,
   };
   const resultChunks = Math.ceil(results.length / 100);
   const completed = {
-    ...initial, status: summary.readiness_errors || summary.failed_publications ? "completed_with_errors" : "completed",
+    ...initial, status: summary.readiness_errors || summary.failed_resource_sets ? "completed_with_errors" : "completed",
     updated_at: Date.now(), completed_at: Date.now(), total: results.length,
     result_chunks: resultChunks, summary, error: null,
   };
