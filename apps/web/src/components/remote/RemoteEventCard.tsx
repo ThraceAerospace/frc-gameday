@@ -4,7 +4,7 @@ import { useTrackedMatches } from "@/components/eventview/hooks/useTrackedMatche
 import { formatEventName, formatTeamNumber, matchCode, matchLongName } from "@/lib/tba/formatters";
 import type { TileSurfaceActions } from "@/components/surface/TileSurfaceActions";
 import type { TileSurfaceState } from "@/components/surface/TileSurfaceState";
-import type { FieldViewEventSnapshot } from "@fieldview/domain";
+import type { FieldViewEventState } from "@fieldview/domain";
 import { getNextMatch, sortMatches } from "@/lib/tba/matchUtils";
 import NextMatchCountdown from "../match/NextMatchCountdown";
 
@@ -12,7 +12,7 @@ type Props = {
   eventKey: string;
   position: number;
   state: TileSurfaceState;
-  eventSnapshot?: FieldViewEventSnapshot;
+  eventSnapshot?: FieldViewEventState;
   actions: TileSurfaceActions;
 };
 
