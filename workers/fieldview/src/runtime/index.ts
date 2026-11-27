@@ -913,7 +913,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     const teamAction = teamParts[3];
     const validTeamRoute = teamParts.length === 4 && teamParts[1] === "teams" &&
       /^[a-zA-Z0-9_-]+$/.test(teamKey ?? "") &&
-      (teamAction === "snapshot" || teamAction === "analytics");
+      (teamAction === "snapshot" || teamAction === "season-analytics");
     if (validTeamRoute && request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: {
         "Access-Control-Allow-Origin": "*",
@@ -925,7 +925,7 @@ async function runtimeFetch(request: Request, env: RuntimeEnvironment, context: 
     if (validTeamRoute && request.method === "GET") {
       if (!env.DB && !env.DISCOVERY_STORAGE) return Response.json({ error: "D1 database binding is unavailable" }, { status: 503 });
       const canonicalTeamKey = /^\d+$/.test(teamKey) ? "frc" + teamKey : teamKey;
-      if (teamAction === "analytics") {
+      if (teamAction === "season-analytics") {
         const year = url.searchParams.has("year") ? Number(url.searchParams.get("year")) : new Date().getUTCFullYear();
         if (!Number.isInteger(year) || year < 1992 || year > new Date().getUTCFullYear() + 1) {
           return Response.json({ error: "Invalid season year" }, { status: 400 });
