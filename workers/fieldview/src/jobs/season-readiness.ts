@@ -41,7 +41,7 @@ async function mapWithConcurrency<T, R>(
 }
 
 async function readJson<T>(env: SeasonEnvironment, key: string): Promise<T | null> {
-  const object = await createDiscoveryServiceClient(env).get(key);
+  const object = await createDiscoveryServiceClient(env).get<T>(key);
   return object;
 }
 
