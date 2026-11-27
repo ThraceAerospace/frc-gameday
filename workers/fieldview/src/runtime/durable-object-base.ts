@@ -20,7 +20,7 @@ const isNodeRuntime = Boolean(
 );
 
 export const DurableObjectBase: DurableObjectBaseConstructor = await import("cloudflare:workers")
-  .then(({ DurableObject }) => DurableObject as unknown as DurableObjectBaseConstructor)
+  .then((workers) => (workers as unknown as { DurableObject: DurableObjectBaseConstructor }).DurableObject)
   .catch((error: unknown) => {
     if (isNodeRuntime) return NodeTestDurableObjectBase;
     throw error;
