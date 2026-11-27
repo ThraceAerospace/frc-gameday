@@ -52,8 +52,8 @@ test("discovery initializes missing event and team Durable Objects before readin
   assert.ok(jobs.includes("registry/runtime-events/"));
   assert.ok(jobs.includes("registry/runtime-teams/"));
   assert.match(jobs, /manual-discovery-event-runtime-registration/);
-  assert.match(jobs, /readiness-event-runtime-registration/);
-  assert.match(jobs, /team-readiness-runtime-registration/);
+  assert.match(jobs, /manual-discovery-event-runtime-registration/);
+  assert.match(jobs, /manual-discovery-team-runtime-registration/);
   assert.match(eventRuntime, /url\.pathname === "\/register"/);
   assert.match(teamRuntime, /url\.pathname === "\/register"/);
   const registration = jobs.slice(jobs.indexOf("async function registerDiscoveredRuntimes"), jobs.indexOf("async function readPublishedSeason"));

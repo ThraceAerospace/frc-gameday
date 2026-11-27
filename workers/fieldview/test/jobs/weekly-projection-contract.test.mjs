@@ -15,10 +15,10 @@ const [jobs, weeklyWorkflow, projection, coordinator, entrypoint, wrangler, runt
 ]);
 
 test("daily event readiness no longer republishes the weekly candidate projection", () => {
-  const start = jobs.indexOf("export class DailyEventReadinessWorkflow");
-  const end = jobs.indexOf("export class DailyTeamReadinessWorkflow");
+  const start = seasonReadiness.indexOf("export class EventSeasonReadinessWorkflow");
+  const end = seasonReadiness.indexOf("export class TeamSeasonReadinessWorkflow");
   assert.ok(start >= 0 && end > start);
-  const eventReadiness = jobs.slice(start, end);
+  const eventReadiness = seasonReadiness.slice(start, end);
   assert.doesNotMatch(eventReadiness, /events-this-week|projections\/events\/this-week|classifyEventThisWeek/);
 });
 

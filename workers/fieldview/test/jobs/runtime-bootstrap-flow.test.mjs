@@ -49,9 +49,9 @@ test("both Durable Objects bootstrap provider resources without materializing cl
     assert.match(source, /bootstrap:accepted:/);
     assert.match(source, /lastWebhookAt > body\.acquired_at/);
     const bootstrapStart = source.indexOf('url.pathname === "/bootstrap"');
-    const bootstrapEnd = source.indexOf("\\n    if (", bootstrapStart + 1);
+    const bootstrapEnd = source.indexOf("\n    if (", bootstrapStart + 1);
     const bootstrap = source.slice(bootstrapStart, bootstrapEnd);
-    assert.doesNotMatch(bootstrap, /await this\\.(publishEventState|snapshot)\\(/);
+    assert.doesNotMatch(bootstrap, /await this\.(publishEventState|snapshot)\(/);
     assert.match(bootstrap, /resource_status/);
   }
   assert.match(dispatch, /bootstrap: "bootstrap"/);
@@ -64,17 +64,17 @@ test("client state projections are optional and snapshot reads never persist the
   const eventProjectionEnd = eventRuntime.indexOf("private async recalculateAnalytics(", eventProjectionStart);
   const eventProjection = eventRuntime.slice(eventProjectionStart, eventProjectionEnd);
   assert.ok(eventProjectionStart >= 0 && eventProjectionEnd > eventProjectionStart);
-  assert.doesNotMatch(eventProjection, /storage\\.(put|delete)|transaction\\(async/);
+  assert.doesNotMatch(eventProjection, /storage\.(put|delete)|transaction\(async/);
 
   const teamProjectionStart = teamRuntime.indexOf("private async snapshot(year:");
   const teamProjectionEnd = teamRuntime.indexOf("private async pollResourceNow(", teamProjectionStart);
   const teamProjection = teamRuntime.slice(teamProjectionStart, teamProjectionEnd);
   assert.ok(teamProjectionStart >= 0 && teamProjectionEnd > teamProjectionStart);
-  assert.doesNotMatch(teamProjection, /storage\\.(put|delete)|tx\\.(put|delete)/);
+  assert.doesNotMatch(teamProjection, /storage\.(put|delete)|tx\.(put|delete)/);
 
   const seasonAnalyticsStart = teamRuntime.indexOf("private async buildSeasonAnalyticsResponse(");
-  const seasonAnalyticsEnd = teamRuntime.indexOf("\\n  private async ", seasonAnalyticsStart + 1);
+  const seasonAnalyticsEnd = teamRuntime.indexOf("\n  private async ", seasonAnalyticsStart + 1);
   const seasonAnalytics = teamRuntime.slice(seasonAnalyticsStart, seasonAnalyticsEnd);
-  assert.doesNotMatch(seasonAnalytics, /storage\\.put/);
-  assert.match(seasonAnalytics, /seasonAnalyticsCache\\.set/);
+  assert.doesNotMatch(seasonAnalytics, /storage\.put/);
+  assert.match(seasonAnalytics, /seasonAnalyticsCache\.set/);
 });
