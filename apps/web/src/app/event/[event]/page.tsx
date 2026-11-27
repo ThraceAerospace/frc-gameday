@@ -2,7 +2,7 @@ import Link from "next/link";
 import SiteShell from "@/components/navigation/SiteShell";
 import {
   type FieldViewEvent,
-  type FieldViewEventSnapshot,
+  type FieldViewEventState,
   type FieldViewMatch,
   type FieldViewPlayoffAlliance,
   type FieldViewTeam,
@@ -47,7 +47,7 @@ export default async function EventPage({
     );
   }
 
-  let eventSnapshot: FieldViewEventSnapshot | null = null;
+  let eventSnapshot: FieldViewEventState | null = null;
 
   try {
     eventSnapshot = (await getCanonicalEventSnapshot(eventKey))?.snapshot ?? null;
@@ -108,7 +108,7 @@ export default async function EventPage({
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
   // EventState may legitimately publish an empty or absent team/match projection.
-  // Only a missing EventState publication is an incomplete-state demand signal.
+  // Only a missing EventState projection is an incomplete-state demand signal.
   if (!eventSnapshot) logIncompleteStateServed({ entity_kind: "event", entity_key: eventKey, served_source: "tba_event_discovery", reason_codes: ["event_state_missing"], year: event.year });
 
   return (
