@@ -1,3 +1,4 @@
+import { DurableObjectBase } from "./durable-object-base.ts";
 import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
 import { StatboticsApiClient } from "../../../../packages/providers/statbotics/src/client.ts";
@@ -279,7 +280,7 @@ export function eventResourceEndpoints(eventKey: string): string[] {
  * canonical publications. The Worker-level coordinator owns recurring refresh
  * eligibility and dispatch. Network I/O stays outside storage transactions.
  */
-export class EventRuntime {
+export class EventRuntime extends DurableObjectBase {
   private readonly state: DurableObjectStateLike;
   private readonly storage: DurableObjectStateLike["storage"];
   private readonly api: TBAApiClient;
@@ -292,6 +293,7 @@ export class EventRuntime {
   private hydratedPublication: EventStatePublication | undefined;
 
   constructor(state: DurableObjectStateLike, env: RuntimeEnvironment, eventKey?: string) {
+    super(state, env);
     this.state = state;
     this.storage = state.storage;
     this.env = env;
