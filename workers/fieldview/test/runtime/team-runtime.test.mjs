@@ -110,6 +110,25 @@ test("TeamRuntime reconstructs a failed-source projection from retained endpoint
     "read-time TeamState is never persisted");
 });
 
+test("TeamRuntime ignores precomputed TeamState keys and derives from provider endpoint records", async () => {
+  const storage = new MemoryStorage(), teamKey = "frc3461", year = 2026;
+  storage.values.set("team-key", teamKey);
+  storage.values.set("team-state:" + year, {
+    team_key: teamKey, year, team: { key: teamKey, team_number: 9999 }, sources: {},
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("a read must not acquire missing provider data");
+  }), teamKey);
+  const response = await runtime.fetch(new Request("https://team-runtime/snapshot?year=" + year, {
+    headers: { "X-FieldView-Team-Key": teamKey },
+  }));
+  assert.equal(response.status, 200);
+  const snapshot = await response.json();
+  assert.equal(snapshot.team_key, teamKey);
+  assert.equal(snapshot.team, undefined, "a precomputed state key is not a source of truth");
+  assert.equal(storage.values.has("team-state:" + year), true, "reads do not migrate or rewrite unrelated old keys");
+});
+
 test("TeamRuntime derives snapshots on read without persisting them", async () => {
   const storage = new MemoryStorage(), calls = [], teamKey = "frc3461", year = 2026;
   let activeRequests = 0, maxConcurrentRequests = 0;
@@ -516,10 +535,6 @@ test("TeamRuntime calculates and persists its own TeamEventState", async () => {
 test("TeamRuntime season analytics GET is read-only and explicit refresh caches the aggregate in memory", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = new Date().getUTCFullYear();
   storage.values.set("team-key", teamKey);
-  storage.values.set("team-state:" + year + ":publication", {
-    input_signature: "seeded-team-state",
-    state: { team_key: teamKey, year, sources: {} },
-  });
   const eventResource = teamResourceEndpoints(teamKey, year).find((resource) =>
     resource.provider === "tba" && resource.endpoint.includes("/events/"));
   assert.ok(eventResource);
@@ -633,7 +648,7 @@ test("TeamRuntime season analytics GET is read-only and explicit refresh caches 
 });
 
 
-test("TeamRuntime readiness inspects freshness without queueing provider work", async () => {
+test("TeamRuntime readiness inspects freshness without acquiring provider work", async () => {
   const storage = new MemoryStorage(), teamKey = "frc3461", year = 2027, now = Date.now();
   storage.values.set("team-key", teamKey);
   storage.values.set("team-state:" + year + ":publication", {
