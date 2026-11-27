@@ -81,15 +81,17 @@ export default function WorkflowRunsPanel({ authenticated, year }: { authenticat
   async function dispatch() {
     setBusy(true); setError("");
     try {
+      if (!Number.isInteger(year) || year < 1992 || year > 2200) {
+        throw new Error("Select a valid four-digit season year first.");
+      }
       const response = await fetch("/internal/admin/proxy", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workflowType: type }),
+        body: JSON.stringify({ workflowType: type, year }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Unable to start readiness workflow");
       if (body.workflow_id) {
-        await loadRuns();
-        await loadRun(body.workflow_id);
+        await Promise.all([loadRuns(), loadRun(body.workflow_id)]);
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to start workflow");
