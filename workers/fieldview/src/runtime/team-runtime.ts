@@ -112,7 +112,6 @@ export class TeamRuntime extends DurableObjectBase {
   private readonly hydrationMode: "platform-barrier" | "storage-backed";
   private readonly publishedSnapshots = new Map<number, {
     input_signature: string;
-    representation_signature?: string;
     state: ReturnType<typeof normalizeFieldViewTeamState>;
   }>();
   private readonly seasonAnalyticsCache = new Map<string, {
@@ -135,18 +134,8 @@ export class TeamRuntime extends DurableObjectBase {
     // Provider refresh and cross-runtime work are dispatched explicitly by the coordinator.
     this.activation = state.blockConcurrencyWhile
       ? state.blockConcurrencyWhile(async () => {
-          const [storedKey, publications] = await Promise.all([
-            this.storage.get<string>("team-key"),
-            this.storage.list<{ input_signature: string; representation_signature?: string; state: ReturnType<typeof normalizeFieldViewTeamState> }>({ prefix: "team-state:" }),
-          ]);
+          const storedKey = await this.storage.get<string>("team-key");
           if (storedKey && !this.teamKey) this.teamKey = storedKey;
-          for (const [key, publication] of publications) {
-            const match = /^team-state:(\d+):publication$/.exec(key);
-            if (match && publication?.state) {
-              const year = Number(match[1]);
-              this.publishedSnapshots.set(year, publication);
-            }
-          }
         })
       : Promise.resolve();
   }
@@ -1006,21 +995,13 @@ export class TeamRuntime extends DurableObjectBase {
         state.expiresAt !== null && state.expiresAt < now,
       ] : null),
     );
-    const publicationKey = `team-state:${year}:publication`;
     const inputs = await this.storage.transaction(async (tx) => ({
       states: await Promise.all(resources.map(({ endpoint }) =>
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint)))),
       revision: await tx.get<number>("snapshot-revision") ?? 0,
     }));
     const signature = inputSignature(inputs.states);
-    const representationSignature = JSON.stringify(inputs.states.map((state) => state ? [
-      state.revision, state.lastFetchedAt, state.etag,
-    ] : null));
-    const cached = this.publishedSnapshots.get(year) ?? await this.storage.get<{
-      input_signature: string;
-      representation_signature?: string;
-      state: ReturnType<typeof normalizeFieldViewTeamState>;
-    }>(publicationKey);
+    const cached = this.publishedSnapshots.get(year);
     const signatureHash = await hashSignature(signature);
     const etag = 'W/"fv-team-snapshot-v1-' + year + '-' + inputs.revision + '-' + signatureHash + '"';
     const responseHeaders = {
@@ -1082,7 +1063,7 @@ export class TeamRuntime extends DurableObjectBase {
     if (!stillCurrent) return this.snapshot(year, request);
 
 
-    this.publishedSnapshots.set(year, { input_signature: signature, representation_signature: representationSignature, state: snapshot });
+    this.publishedSnapshots.set(year, { input_signature: signature, state: snapshot });
     const projectionStale = inputs.states.some((state) => Boolean(state && (
       state.status === "failed" || state.status === "stale" || state.status === "unavailable" ||
       (state.expiresAt !== null && state.expiresAt <= now)
