@@ -8,6 +8,7 @@ import { FRC_COLORS_ENDPOINTS } from "../../../../packages/providers/frc-colors/
 import type { StatboticsTeamEvent, StatboticsTeamYear } from "../../../../packages/providers/statbotics/src/types.ts";
 import type { FRCColorsTeam } from "../../../../packages/providers/frc-colors/src/types.ts";
 import { applyPollResponse, createEndpointState, createPollRequestSnapshot, type EndpointState } from "./endpoint-state.ts";
+import { validateRuntimeBootstrapBundle } from "./bootstrap.ts";
 import type { DurableObjectStateLike, RuntimeEnvironment } from "./cloudflare.ts";
 import { D1RecordStore } from "./d1-record-store.ts";
 import type { TBADistrict, TBAMedia, TBAEvent, TBATeam } from "../../../../packages/providers/tba/src/types.ts";
@@ -233,6 +234,43 @@ export class TeamRuntime extends DurableObjectBase {
     const year = yearText === null ? await this.currentSeasonYear() : Number(yearText);
     if (year === null) return Response.json({ error: "TBA current season is unavailable" }, { status: 503 });
     if (!Number.isInteger(year) || year < 1992 || year > 2200) return Response.json({ error: "Invalid season year" }, { status: 400 });
+
+    if (request.method === "POST" && url.pathname === "/bootstrap") {
+      const body: unknown = await request.json().catch(() => null);
+      if (!validateRuntimeBootstrapBundle(body, { kind: "team", key: this.teamKey, year })) {
+        return Response.json({ error: "Invalid team bootstrap bundle" }, { status: 400 });
+      }
+      const allowed = new Set(this.endpoints(year).map((resource) => resource.endpoint));
+      if (body.resources.some((resource) => !allowed.has(resource.endpoint))) {
+        return Response.json({ error: "Bootstrap contains an unrecognized team resource" }, { status: 400 });
+      }
+      const receipt = await this.storage.transaction(async (tx) => {
+        const receiptKey = "bootstrap:accepted:" + year;
+        const previous = await tx.get<{ bootstrap_id: string; acquired_at: number; snapshot_revision: number; publication_status: "complete" | "partial" | "failed" }>(receiptKey);
+        if (previous?.bootstrap_id === body.bootstrap_id) return { ...previous, duplicate: true };
+        if (previous && previous.acquired_at > body.acquired_at) return null;
+        const existing = await Promise.all(body.resources.map((resource) => tx.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint))));
+        if (existing.some((resource) => resource?.lastFetchedAt !== null && resource?.lastFetchedAt !== undefined &&
+            resource.lastFetchedAt > body.acquired_at)) return null;
+        for (const resource of body.resources) await tx.put(endpointKey(resource.endpoint), {
+          ...resource, lastHttpStatus: resource.status === "available" ? 200 : null, lastError: null,
+        });
+        const snapshotRevision = (await tx.get<number>("snapshot-revision") ?? 0) + 1;
+        await tx.put("snapshot-revision", snapshotRevision);
+        const status = body.resources.every((resource) => resource.status === "available") ? "complete" as const
+          : body.resources.some((resource) => resource.lastFetchedAt !== null) ? "partial" as const : "failed" as const;
+        const next = { bootstrap_id: body.bootstrap_id, acquired_at: body.acquired_at, snapshot_revision: snapshotRevision, publication_status: status };
+        await tx.put(receiptKey, next);
+        return { ...next, duplicate: false };
+      });
+      if (!receipt) return Response.json({ error: "Bootstrap is older than runtime data" }, { status: 409 });
+      if (!receipt.duplicate) await this.snapshot(year);
+      return Response.json({
+        bootstrap_id: receipt.bootstrap_id, accepted: true, duplicate: receipt.duplicate,
+        kind: "team", key: this.teamKey, year, snapshot_revision: receipt.snapshot_revision,
+        publication_status: receipt.publication_status,
+      });
+    }
 
     if (pendingAnalyticsRead) {
       const records = await this.storage.list<FieldViewTeamEventState>({ prefix: TEAM_EVENT_STATE_PREFIX });
