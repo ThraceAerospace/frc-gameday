@@ -3,8 +3,9 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
-const [jobs, weeklyWorkflow, projection, coordinator, entrypoint, wrangler, runtime, adminPanel] = await Promise.all([
+const [jobs, seasonReadiness, weeklyWorkflow, projection, coordinator, entrypoint, wrangler, runtime, adminPanel] = await Promise.all([
   read("../../src/jobs/index.ts"),
+  read("../../src/jobs/season-readiness.ts"),
   read("../../src/jobs/weekly-event-projection.ts"),
   read("../../src/jobs/weekly-projection.ts"),
   read("../../src/jobs/polling-coordinator.ts"),
