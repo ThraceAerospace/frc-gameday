@@ -49,13 +49,6 @@ test("EventRuntime rejects analytics publications that regress team or compariso
 
 function seedEventPublication(storage, eventKey) {
   storage.values.set("event-key", eventKey);
-  storage.values.set("event-state:publication", {
-    sourceRevision: 0,
-    snapshotVersion: 0,
-    generatedAt: Date.now(),
-    status: "partial",
-    state: { event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {} },
-  });
 }
 
 test("EventRuntime does not register a Durable Object alarm handler", () => {
@@ -82,57 +75,6 @@ test("explicit registration binds event identity without provider acquisition", 
   assert.equal(storage.values.get("event-key"), "2027rikin");
   assert.equal(providerCalls, 0, "registration binds identity but never polls providers");
 });
-
-test("EventRuntime normalizes legacy publication in memory without writing during reads", async () => {
-  const storage = new MemoryStorage();
-  const eventKey = "2026hydrated";
-  storage.values.set("event-key", eventKey);
-  storage.values.set("snapshot-revision", 4);
-  storage.values.set("event-state:publication", {
-    sourceRevision: 7, snapshotVersion: 4, generatedAt: Date.now(), status: "partial",
-    state: {
-      event_key: eventKey, event: { key: eventKey }, teams: [], matches: [], sources: {},
-      analytics: { obsolete: true }, team_states: [{ team_key: "frc3461", obsolete: true }],
-    },
-  });
-  storage.values.set("event-view:publication", {
-    schema_version: 1, event_key: eventKey, version: 1, source_revision: 7,
-    generated_at: Date.now(), status: "partial", team_state_revisions: [],
-    storage_format: "chunked-json-v1", chunk_count: 1,
-  });
-  storage.values.set("event-view:publication:v1:chunk:0", "{legacy duplicate}");
-  let providerCalls = 0, teamCalls = 0, activationCalls = 0;
-  const runtime = new EventRuntime({
-    storage,
-    blockConcurrencyWhile: async (callback) => { activationCalls += 1; await callback(); },
-  }, {
-    TBA_API_KEY: "test-api-key", TBA_WEBHOOK_SECRET: "unused", RUNTIME_ADMIN_TOKEN: "admin",
-    TEAM_RUNTIME: { idFromName: (key) => key, get: () => ({ fetch: async () => { teamCalls += 1; return Response.json({}); } }) },
-    fetcher: async () => { providerCalls += 1; return Response.json([]); },
-  });
-  const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
-    headers: { "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(response.status, 200);
-  assert.equal((await response.json()).event.key, eventKey);
-  const persistedPublication = storage.values.get("event-state:publication");
-  assert.equal("analytics" in persistedPublication.state, true,
-    "activation must not rewrite legacy publication records");
-  assert.equal("team_states" in persistedPublication.state, true);
-  assert.equal(activationCalls, 1);
-  assert.equal(storage.values.has("event-view:publication"), true,
-    "legacy EventView cleanup requires an explicit migration operation");
-  assert.equal(storage.values.has("event-view:publication:v1:chunk:0"), true,
-    "activation never deletes legacy chunks during a read");
-  assert.equal(providerCalls, 0);
-  assert.equal(teamCalls, 0, "event snapshot reads never fan out to TeamRuntime");
-  const diagnostics = await runtime.fetch(new Request("https://event-runtime/state", {
-    headers: { Authorization: "Bearer admin", "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal((await diagnostics.json()).readiness.hydration, "complete");
-});
-
-
 
 test("EventRuntime derives EventState after a match-score webhook without persisting the projection", async () => {
   const storage = new MemoryStorage();
@@ -186,11 +128,6 @@ test("EventRuntime derives EventState after a match-score webhook without persis
     },
   });
 
-  const initialPublicationResponse = await runtime.fetch(new Request("https://event-runtime/publish-state", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(initialPublicationResponse.status, 200);
   const initialResponse = await runtime.fetch(snapshotRequest());
   assert.equal(initialResponse.status, 200);
   assert.equal(initialResponse.headers.get("X-FieldView-Snapshot-Version"), "1");
@@ -424,11 +361,6 @@ test("explicit EventState publication composes canonical event-team domain objec
     fetcher: async () => new Response("unused"),
   };
   const runtime = new EventRuntime({ storage }, env, eventKey);
-  const publish = await runtime.fetch(new Request("https://event-runtime/publish-state", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(publish.status, 200, "an explicit runtime command creates the initial publication");
   const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -480,11 +412,6 @@ test("explicit EventState publication composes canonical event-team domain objec
   advancementState.lastAttemptAt = now;
   storage.values.set("endpoint:" + endpoints[11], advancementState);
 
-  const republish = await runtime.fetch(new Request("https://event-runtime/publish-state", {
-    method: "POST",
-    headers: { Authorization: "Bearer runtime-token", "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(republish.status, 200);
   const refreshed = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
   }));
@@ -770,47 +697,7 @@ test("EventRuntime directly acquires participant discovery when its owned TBA re
   assert.deepEqual((await ready.json()).team_keys, ["frc254", "frc3461"]);
 });
 
-test("EventRuntime omits legacy embedded TeamEventStates from reads without rewriting storage", async () => {
-  const storage = new MemoryStorage(), eventKey = "2026ownership";
-  storage.values.set("snapshot-revision", 1);
-  storage.values.set("event-state:publication", {
-    sourceRevision: 0,
-    snapshotVersion: 1,
-    generatedAt: Date.now(),
-    status: "partial",
-    state: {
-      event_key: eventKey,
-      event: { key: eventKey },
-      sources: {},
-      teams: [],
-      team_states: [{ event_key: eventKey, team_key: "frc3461", sources: {} }],
-    },
-  });
-  const runtime = new EventRuntime({
-    storage,
-    blockConcurrencyWhile: async (callback) => callback(),
-  }, {
-    TBA_API_KEY: "test-api-key",
-    TBA_WEBHOOK_SECRET: "test-webhook-secret",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    EVENT_RUNTIME: { idFromName: (name) => name, get: () => ({ fetch: async () => new Response() }) },
-    fetcher: async () => Response.json([]),
-  }, eventKey);
-  const response = await runtime.fetch(new Request("https://event-runtime/snapshot", {
-    headers: { "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(response.status, 200);
-  const persisted = storage.values.get("event-state:publication");
-  assert.equal(Object.hasOwn(persisted.state, "team_states"), true,
-    "legacy durable data remains untouched until an explicit migration");
-  const composed = await response.json();
-  assert.equal("team_states" in composed, false,
-    "the event snapshot never embeds TeamRuntime-owned state");
-});
-
-
-
-test("EventRuntime readiness inspects freshness without queueing provider work", async () => {
+test("EventRuntime readiness inspects freshness without acquiring provider work", async () => {
   const storage = new MemoryStorage(), eventKey = "2027rikin", now = Date.now();
   seedEventPublication(storage, eventKey);
   const endpoints = eventResourceEndpoints(eventKey);
@@ -883,80 +770,15 @@ test("EventRuntime subscriptions can register before provider resources have bee
 });
 
 
-test("EventRuntime composes FieldViewEventView from event state and TeamRuntime-owned TeamEventStates", async () => {
-  const storage = new MemoryStorage(), eventKey = "2026fieldview", teamKey = "frc3461";
-  const eventState = {
-    event_key: eventKey,
-    event: { key: eventKey, name: "FieldView Test", timezone: "America/New_York" },
-    teams: [{ key: teamKey, team_number: 3461 }],
-    sources: {},
-  };
-  storage.values.set("snapshot-revision", 1);
-  storage.values.set("event-state:publication", {
-    sourceRevision: 0,
-    snapshotVersion: 1,
-    generatedAt: Date.now(),
-    status: "complete",
-    state: eventState,
-  });
-  storage.values.set("team-state-revision:" + teamKey, 2);
-  storage.values.set("event-team-comparison-input:updated-at", 123);
-  const teamEventState = {
-    event_key: eventKey,
-    team_key: teamKey,
-    sources: { team: {}, event_team: {}, matches: {} },
-    match_refs: [],
-    analytics: { event_key: eventKey, team_key: teamKey, metrics: [], findings: [] },
-  };
-  const teamNamespace = {
-    idFromName: (key) => key,
-    get: () => ({
-      fetch: async () => Response.json(teamEventState, { headers: {
-        "X-FieldView-Event-Source-Revision": "0",
-        "X-FieldView-Team-Source-Revision": "2",
-        "X-FieldView-Comparison-Input-Updated-At": "123",
-        "X-FieldView-Team-Event-Revision": "4",
-      } }),
-    }),
-  };
-  const runtime = new EventRuntime({ storage }, {
-    TBA_API_KEY: "test-api-key",
-    TBA_WEBHOOK_SECRET: "test-webhook-secret",
-    RUNTIME_ADMIN_TOKEN: "runtime-token",
-    TEAM_RUNTIME: teamNamespace,
-    fetcher: async () => Response.json([]),
-  }, eventKey);
-  const response = await runtime.fetch(new Request("https://event-runtime/view", {
-    headers: { "X-FieldView-Event-Key": eventKey },
-  }));
-  assert.equal(response.status, 200);
-  assert.equal(response.headers.get("X-FieldView-Team-State-Coverage"), "partial",
-    "a public event view never synchronously fans out to TeamRuntime objects");
-  const view = await response.json();
-  assert.equal(view.event.event_key, eventKey);
-  assert.equal(view.analytics, null);
-  assert.deepEqual(view.team_state_refs, [{
-    owner: "team-runtime", owner_id: teamKey, record_type: "team-event-state", record_id: eventKey, revision: null,
-  }]);
-  assert.deepEqual(view.team_state_coverage, {
-    state: "partial",
-    expected_count: 1,
-    materialized_count: 0,
-    pending_team_keys: [teamKey],
-  });
-  assert.equal("team_states" in view.event, false);
-  assert.equal(response.headers.get("X-FieldView-Team-State-Coverage"), "partial");
-});
-
 test("EventRuntime admin state diagnostics do not fan out to TeamRuntime", async () => {
   const storage = new MemoryStorage();
   const eventKey = "2026adminstate";
-  storage.values.set("event-state:publication", {
-    sourceRevision: 0,
-    snapshotVersion: 1,
-    generatedAt: Date.now(),
-    status: "complete",
-    state: { event_key: eventKey, teams: [{ key: "frc3461" }] },
+  const rosterEndpoint = eventResourceEndpoints(eventKey)[1];
+  storage.values.set("endpoint:" + rosterEndpoint, {
+    endpoint: rosterEndpoint, status: "available",
+    data: [{ key: "frc3461", team_number: 3461 }], providerData: [{ key: "frc3461", team_number: 3461 }],
+    lastFetchedAt: Date.now(), lastWebhookAt: null, expiresAt: Date.now() + 60_000,
+    revision: 1, validatorRevision: 1, etag: null, lastAttemptAt: Date.now(),
   });
   const runtime = new EventRuntime({ storage }, {
     TBA_API_KEY: "test-api-key",
@@ -1082,7 +904,6 @@ test("EventRuntime preserves its last-good publication when provider revalidatio
       event_key: eventKey, event: lastGoodData, teams: [], matches: [], sources: {},
     },
   };
-  storage.values.set("event-state:publication", publication);
   storage.values.set("snapshot-revision", 3);
   let providerCalls = 0;
   const runtime = new EventRuntime({ storage }, {
@@ -1107,7 +928,7 @@ test("EventRuntime preserves its last-good publication when provider revalidatio
     body: JSON.stringify({ endpoints: [endpoint] }),
   }));
   assert.equal(refresh.status, 503,
-    "a transient provider failure must be visible to the queue consumer as retryable");
+    "a transient provider failure must be visible to the Workflow coordinator as retryable");
   const refreshBody = await refresh.json();
   assert.equal(refreshBody.retryable, true);
   assert.equal(refreshBody.failed, 1);
@@ -1121,8 +942,8 @@ test("EventRuntime preserves its last-good publication when provider revalidatio
   assert.deepEqual(afterFailure.providerData, lastGoodData);
   assert.equal(afterFailure.etag, '"last-good-v1"');
   assert.equal(afterFailure.revision, 3);
-  assert.equal(storage.values.get("event-state:publication"), publication,
-    "a failed refresh must not replace the last-good canonical publication");
+  assert.equal(storage.values.has("event-state:publication"), false,
+    "EventState is never persisted as part of provider refresh");
 
   const snapshot = await runtime.fetch(new Request("https://event-runtime/snapshot", {
     headers: { "X-FieldView-Event-Key": eventKey },
@@ -1251,10 +1072,6 @@ test("EventRuntime recovers its last-good representation after a failed provider
     etag: '"recovery-v1"', lastFetchedAt: now - 120_000, expiresAt: now - 1,
     revision: 2, validatorRevision: 2, lastAttemptAt: now - 120_000, lastWebhookAt: null,
   });
-  storage.values.set("event-state:publication", {
-    sourceRevision: 2, snapshotVersion: 2, generatedAt: now - 120_000, status: "partial",
-    state: { event_key: eventKey, event: lastGoodData, teams: [], matches: [], sources: {} },
-  });
   storage.values.set("snapshot-revision", 2);
   let providerCalls = 0;
   const runtime = new EventRuntime({ storage }, {
@@ -1313,8 +1130,8 @@ test("EventRuntime recovers its last-good representation after a failed provider
   const projection = runtime.hydratedPublication;
   assert.equal(projection.state.event.name, "Recovered Event Name",
     "the read-time EventState projection must reflect the recovered endpoint data");
-  assert.equal(storage.values.has("event-state:publication"), true,
-    "an older materialized fallback may remain, but recovery does not require replacing it");
+  assert.equal(storage.values.has("event-state:publication"), false,
+    "the recovered read-time projection is not persisted");
 });
 
 
