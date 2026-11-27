@@ -207,5 +207,4 @@ function closePortIfIdle() {
   heartbeatTimer = null;
   port.close();
   port = null;
-  worker = null;
 }
