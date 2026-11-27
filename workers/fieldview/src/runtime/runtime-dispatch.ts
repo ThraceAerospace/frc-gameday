@@ -45,6 +45,7 @@ export async function dispatchRuntime(
       : action === "state" ? "state?year=" + season
       : action === "snapshot" ? "snapshot?year=" + season + "&noSchedule=1"
       : action === "refresh" ? "refresh?year=" + season
+      : action === "bootstrap" ? "bootstrap?year=" + season
       : action === "readiness" ? "readiness?year=" + season
       : action === "pending-analytics" ? "pending-event-analytics?year=" + season : null;
     if (!path) return Response.json({ error: "Unsupported team runtime dispatch" }, { status: 400 });
@@ -70,7 +71,7 @@ export async function dispatchRuntime(
 
       }
     }
-    if (response.ok && ["refresh", "seed"].includes(action)) await registerRuntimeMarker(env, "team", key);
+    if (response.ok && ["refresh", "seed", "bootstrap"].includes(action)) await registerRuntimeMarker(env, "team", key);
     return response;
   }
 
@@ -79,6 +80,7 @@ export async function dispatchRuntime(
   const paths: Record<string, string> = {
     participants: "participants",
     readiness: "readiness",
+    bootstrap: "bootstrap",
     state: "state",
     refresh: "refresh",
     publish: "publish-state",
