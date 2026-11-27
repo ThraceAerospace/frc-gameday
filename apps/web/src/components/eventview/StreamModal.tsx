@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { normalizeCustomWebcastUrl } from "@/lib/events/normalizeCustomWebcastUrl";
 
 type Stream = { key: string; type: string; date?: string | null; meta?: { title?: string | null } | null };
 type Props = { open: boolean; onClose: () => void; streams?: Stream[]; activeKey?: string | null; onSelect: (key: string) => void };
@@ -31,7 +32,7 @@ export default function StreamModal({ open, onClose, streams = [], activeKey, on
         setUrlError("Enter a valid HTTP or HTTPS stream URL.");
         return;
       }
-      onSelect(`custom:${parsed.toString()}`);
+      onSelect(`custom:${normalizeCustomWebcastUrl(parsed.toString())}`);
       onClose();
     } catch {
       setUrlError("Enter a complete URL, including https://.");
