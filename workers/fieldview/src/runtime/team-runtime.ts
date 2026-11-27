@@ -793,17 +793,17 @@ export class TeamRuntime extends DurableObjectBase {
       }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/readiness") {
-      const publication = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
-      const publishedState = publication?.state;
-      const validState = Boolean(publication && typeof publication.input_signature === "string" && publishedState && typeof publishedState === "object" &&
-        !Array.isArray(publishedState) &&
-        (publishedState as Record<string, unknown>).team_key === this.teamKey &&
-        (publishedState as Record<string, unknown>).year === year &&
-        (publishedState as Record<string, unknown>).sources &&
-        typeof (publishedState as Record<string, unknown>).sources === "object" &&
-        !Array.isArray((publishedState as Record<string, unknown>).sources));
       const resources = this.endpoints(year);
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
+      // A materialized TeamState is optional; readiness is based on its source
+      // endpoint records, not on a previously persisted projection.
+      const validState = resources.every(({ endpoint }) => {
+        const source = states.get(endpointKey(endpoint));
+        return Boolean(source && (
+          source.lastFetchedAt !== null || source.lastWebhookAt !== null ||
+          source.status === "unavailable"
+        ));
+      });
       const now = Date.now();
       const staleResources = resources.filter((resource) => {
         const source = states.get(endpointKey(resource.endpoint));
@@ -812,12 +812,10 @@ export class TeamRuntime extends DurableObjectBase {
           (source.expiresAt !== null && source.expiresAt <= now);
       }).map((resource) => resource.endpoint);
       const refreshRequired = !validState || staleResources.length > 0;
-      const latest = await this.storage.get<{ input_signature?: string; state?: unknown }>("team-state:" + year + ":publication");
-      const latestState = latest?.state as Record<string, unknown> | undefined;
       return Response.json({
         team_key: this.teamKey,
         year,
-        state_valid: Boolean(latest && latestState?.team_key === this.teamKey && latestState?.year === year),
+        state_valid: validState,
         stale_resources: staleResources,
         refresh_required: refreshRequired,
         refresh_dispatched: false,
