@@ -187,12 +187,15 @@ async function runSeasonReadiness(
   if (!keys.length) throw new Error("No " + kind + " identities were discovered for " + year);
 
   await ensureRegistered(env, kind, keys, year, step);
+  const registry = await registeredKeys(env, kind);
+  const registered = keys.filter((key) => registry.has(key));
+  if (registered.length !== keys.length) throw new Error("Not all discovered " + kind + " runtimes were registered");
   const results: Array<{
     key: string; state_valid: boolean; refresh_required: boolean; queued: boolean;
-    bootstrapped: boolean; publication_status?: string; error?: string;
+    bootstrapped: boolean; already_initialized?: boolean; publication_status?: string; error?: string;
   }> = [];
-  for (let offset = 0; offset < keys.length; offset += 25) {
-    const chunk = keys.slice(offset, offset + 25);
+  for (let offset = 0; offset < registered.length; offset += 25) {
+    const chunk = registered.slice(offset, offset + 25);
     const outcomes = await step.do("bootstrap-" + kind + "-chunk-" + offset, async () =>
       mapWithConcurrency(chunk, 4, async (key) => {
         try {
