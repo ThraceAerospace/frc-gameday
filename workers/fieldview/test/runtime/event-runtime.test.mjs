@@ -1083,7 +1083,14 @@ test("EventRuntime preserves its last-good publication when provider revalidatio
     },
     body: JSON.stringify({ endpoints: [endpoint] }),
   }));
-  assert.equal(refresh.status, 200);
+  assert.equal(refresh.status, 503,
+    "a transient provider failure must be visible to the queue consumer as retryable");
+  const refreshBody = await refresh.json();
+  assert.equal(refreshBody.retryable, true);
+  assert.equal(refreshBody.failed, 1);
+  assert.deepEqual(refreshBody.failed_endpoints, [endpoint]);
+  assert.equal(refreshBody.results[0].http_status, 503);
+  assert.match(refreshBody.results[0].last_error, /HTTP 503/);
   assert.equal(providerCalls, 1);
   const afterFailure = storage.values.get("endpoint:" + endpoint);
   assert.equal(afterFailure.status, "stale");
