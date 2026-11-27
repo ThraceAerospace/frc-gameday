@@ -135,7 +135,7 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   assert.ok(initialEtag);
   const unchangedResponse = await runtime.fetch(snapshotRequest(initialEtag));
   assert.equal(unchangedResponse.status, 304, "matching validators avoid the composed snapshot body");
-  const initialPublication = runtime.hydratedPublication;
+  const initialPublication = runtime.hotProjection;
   assert.equal(initialPublication.snapshotVersion, 1);
   assert.equal(initialPublication.sourceRevision, 1);
   assert.equal(initialPublication.state.matches[0].alliances.red.score, 10);
@@ -170,7 +170,7 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   assert.deepEqual(await webhookResponse.json(), { accepted: true, duplicate: false });
 
   // The committed webhook update invalidates the in-memory projection.
-  const webhookPublication = runtime.hydratedPublication;
+  const webhookPublication = runtime.hotProjection;
   assert.notEqual(webhookPublication, initialPublication);
   assert.equal(webhookPublication.snapshotVersion, 2);
   assert.equal(webhookPublication.state.matches[0].alliances.red.score, 20);
@@ -186,7 +186,7 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   assert.equal(updatedSnapshot.matches[0].alliances.red.score, 20);
   assert.equal(updatedSnapshot.matches[0].actual_time, 123);
 
-  const updatedPublication = runtime.hydratedPublication;
+  const updatedPublication = runtime.hotProjection;
   assert.equal(updatedPublication, webhookPublication);
   assert.equal(updatedPublication.snapshotVersion, 2);
   assert.equal(updatedPublication.sourceRevision, 2);
@@ -196,7 +196,7 @@ test("EventRuntime derives EventState after a match-score webhook without persis
   const repeatedResponse = await runtime.fetch(snapshotRequest(updatedResponse.headers.get("ETag")));
   assert.equal(repeatedResponse.status, 304);
   assert.equal(repeatedResponse.headers.get("X-FieldView-Snapshot-Version"), "2");
-  assert.equal(runtime.hydratedPublication, updatedPublication);
+  assert.equal(runtime.hotProjection, updatedPublication);
   assert.equal(storage.values.has("event-state:publication"), false);
   assert.equal(publicationWrites, 0, "unchanged reads must not write a materialized projection");
 });
@@ -1122,7 +1122,7 @@ test("EventRuntime recovers its last-good representation after a failed provider
   assert.equal(recovered.validatorRevision, 3);
   assert.equal(recovered.lastError, null);
   assert.equal(recovered.lastHttpStatus, 200);
-  const projection = runtime.hydratedPublication;
+  const projection = runtime.hotProjection;
   assert.equal(projection.state.event.name, "Recovered Event Name",
     "the read-time EventState projection must reflect the recovered endpoint data");
   assert.equal(storage.values.has("event-state:publication"), false,
