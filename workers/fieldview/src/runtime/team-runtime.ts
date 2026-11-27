@@ -1050,11 +1050,8 @@ export class TeamRuntime extends DurableObjectBase {
       ...(acquired(frcColors) ? { frc_colors: frcColors!.data as FRCColorsTeam | null } : {}),
     });
 
-    // Publish only if the provider inputs still match the exact read set used
-    // to build this object. The publication and compatibility state key move
-    // together in one transaction, so readers never observe a partial state.
-    // Confirm the read set is still current, but never write a projection as
-    // a side effect of GET. A concurrent provider update simply retries.
+    // Confirm the provider inputs still match the exact read set used to
+    // build this ephemeral projection. A concurrent update simply retries.
     const stillCurrent = await this.storage.transaction(async (tx) => {
       const currentStates = await Promise.all(resources.map(({ endpoint }) =>
         tx.get<TeamEndpointState<unknown>>(endpointKey(endpoint))));
