@@ -66,5 +66,3 @@ export interface FieldViewEventState {
   advancement_points?: TBAEventAdvancementPoints | null;
 }
 
-/** @deprecated Use FieldViewEventState. Retained during the staged migration. */
-export type FieldViewEventSnapshot = FieldViewEventState;
