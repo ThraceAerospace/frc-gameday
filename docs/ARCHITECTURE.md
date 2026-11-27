@@ -24,7 +24,7 @@ Cloudflare Workflows coordinate season discovery, event/team readiness, bootstra
 
 ### Realtime
 
-The browser SharedWorker maintains one Worker `/stream` connection for the browser origin and multiplexes canonical EventRuntime snapshot and analytics subscriptions to tabs. The Worker Multiplexer coordinates subscriptions and data-bearing publications. On reconnect, the browser recovers snapshots through the canonical Worker endpoints. Browser code does not acquire TBA, Statbotics, or FRC Colors resources.
+The browser SharedWorker maintains one Worker `/stream` connection for the browser origin and multiplexes canonical EventRuntime snapshot and analytics subscriptions to tabs. The Worker Multiplexer coordinates subscriptions and data-bearing publications. The browser fetches the canonical snapshot before opening `/stream`. Reconnect only re-registers subscriptions; data-bearing WebSocket notifications never trigger HTTP refetches. Browser code does not acquire TBA, Statbotics, or FRC Colors resources.
 
 ### Webhooks
 
