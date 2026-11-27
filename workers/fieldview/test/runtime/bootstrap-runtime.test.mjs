@@ -122,3 +122,40 @@ test("TeamRuntime accepts and idempotently republishes a year-scoped bootstrap",
   assert.equal((await second.json()).duplicate, true);
   assert.equal(storage.values.get("snapshot-revision"), revision);
 });
+
+test("TeamRuntime rejects a bootstrap older than a webhook update", async () => {
+  const key = "frc3461", year = 2027, acquiredAt = Date.now();
+  const storage = new MemoryStorage();
+  const endpoints = teamResourceEndpoints(key, year).map((item) => item.endpoint);
+  const resources = endpoints.map((endpoint, index) => resource(
+    endpoint,
+    index === 0 ? { key, team_number: 3461, name: "Workflow Team" } : index === 4 || index === 6 ? {} : [],
+    acquiredAt,
+  ));
+  const firstEndpoint = endpoints[0];
+  const newerWebhookState = {
+    ...createEndpointState(firstEndpoint),
+    status: "available",
+    data: { key, team_number: 3461, name: "Webhook Team" },
+    providerData: null,
+    lastFetchedAt: null,
+    lastWebhookAt: acquiredAt + 10,
+    lastAttemptAt: acquiredAt + 10,
+    revision: 1,
+  };
+  storage.values.set("endpoint:" + firstEndpoint, newerWebhookState);
+  const bundle = {
+    version: 1, bootstrap_id: "team-bootstrap-stale", kind: "team",
+    key, year, acquired_at: acquiredAt, resources,
+  };
+  const runtime = new TeamRuntime({ storage }, {
+    TBA_API_KEY: "test", RUNTIME_ADMIN_TOKEN: "admin",
+    fetcher: async () => { throw new Error("stale bootstrap must not fetch providers"); },
+  }, key);
+  const response = await runtime.fetch(new Request("https://team-runtime/bootstrap?year=" + year, {
+    method: "POST", headers: adminHeaders("X-FieldView-Team-Key", key),
+    body: JSON.stringify(bundle),
+  }));
+  assert.equal(response.status, 409);
+  assert.equal(storage.values.get("endpoint:" + firstEndpoint).data.name, "Webhook Team");
+});
