@@ -1,141 +1,79 @@
-# Architecture Decision: Separate Discovery, System Records, and Runtime State
+# Architecture decision: Discovery, System Records, and Runtime State
 
-- **Status:** Accepted
+- **Status:** Accepted, clarified by ADR-0020
 - **Date:** 2026-11-24
-- **Scope:** FieldView Cloudflare architecture migration
-- **Applies to:** All environments
-- **Decision authority:** FieldView project owner
+- **Scope:** Cloudflare storage domains, runtime ownership, and polling orchestration
 
-> All contrary provisions are abrogated.
+ADR-0020 is authoritative wherever this decision's earlier language about persisted normalized state, Workflow provider ownership, or readiness conflicts with it.
 
-This decision supersedes any earlier architecture notes, implementation assumptions, or plans that assign workflow records, runtime registrations, system logs, or other operational records to DiscoveryStore, or that require a central polling process to fetch TBA resources and construct EventRuntime deltas.
+## Storage domains
 
-## Decision
+FieldView separates three data domains:
 
-FieldView has three distinct data domains: **Discovery**, **System Records**, and **Runtime State**. Each has a defined purpose, owner, and storage responsibility. They must not be combined merely for implementation convenience.
+### Discovery
+D1 is authoritative for event/team discovery directories, current-season metadata, weekly event candidates, and discovery refresh metadata. KV may hold lightweight read-heavy projections where its consistency model is sufficient.
 
-### 1. Discovery
+### System Records
+D1 stores FieldView's operational records: Workflow execution/progress/outcomes, runtime registration, administrative actions, and durable operational history. System Records has a separate repository and ownership boundary from Discovery, even when both use the same physical D1 database.
 
-**Purpose:** Maintain information about the events and teams FieldView knows about and the discovery metadata used to determine what the system should process.
+### Runtime State
+EventRuntime and TeamRuntime Durable Objects own canonical provider endpoint records and scope-local canonical data. EventRuntime owns event-scoped provider resources and event facts; TeamRuntime owns team/year-scoped provider resources and team facts. Multiplexer owns subscription coordination; RemoteSessionRuntime owns remote-display session signaling.
 
-Responsibilities:
-- Event and team discovery directories.
-- Current-season metadata.
-- TBA `/status`-derived discovery information.
-- The weekly event candidate list, `events-this-week`.
-- Discovery refresh metadata and results.
+EventState and TeamState are not persisted canonical records. They are ephemeral normalized projections derived from provider endpoint records at read time, as defined by ADR-0020.
 
-**Storage:** Cloudflare D1 is the authoritative discovery store. Workers KV may hold lightweight, read-heavy projections, such as `events-this-week`, where its consistency model is sufficient.
+## Runtime abstraction and ongoing refresh ownership
 
-The `discovery_records` table and Discovery repository are exclusively for discovery. They are not a general-purpose operational database.
+EventRuntime and TeamRuntime implement the same runtime lifecycle at different scopes. Each runtime:
+1. Accepts explicit refresh commands for its own identity and scope.
+2. Loads its own provider endpoint records and validators.
+3. Fetches its own provider resources using conditional validators where supported.
+4. Reconciles accepted responses against its latest durable working state.
+5. Persists meaningful changes and required recovery metadata.
+6. Publishes versioned, data-bearing changes when appropriate.
+7. Preserves last-good data on failed or partial acquisition and treats HTTP 304 as a strict no-op for payload state.
 
-### 2. System Records
+Neither runtime fetches or persists resources owned by the other. Cross-runtime dependencies use explicit versioned references or operation-specific inputs, not ownership transfer or duplicated canonical aggregates.
 
-**Purpose:** Maintain durable, queryable records describing FieldView's own operations.
+## First-registration bootstrap exception
 
-Responsibilities:
-- Workflow execution records, progress summaries, and outcomes.
-- Runtime registration and operational records.
-- Administrative actions and their outcomes.
-- Structured system events and operational history.
-- Other durable records describing what the system has done.
+ADR-0020 clarifies a narrow exception to runtime-owned provider acquisition: when an EventRuntime or TeamRuntime is first registered/created, its initialization Workflow may perform one bounded, idempotent acquisition of the initial provider endpoint resources required to hydrate that runtime reliably. The Workflow imports those endpoint records into the owning Durable Object.
 
-**Storage:** Cloudflare D1, through the `system_records` table and a System Records repository logically separate from Discovery. Both repositories share one physical D1 database but do not share record ownership.
+This exception:
+- is tied to first registration/creation;
+- exists specifically to ensure reliable initial runtime hydration;
+- persists provider endpoint records and their acquisition metadata only;
+- does not materialize EventState or TeamState;
+- does not become a recurring refresh or retry proxy.
 
-System Records must have independent retention policies appropriate to each record type.
+After bootstrap, all ongoing provider acquisition belongs to the owning runtime. Workflows may orchestrate operations, but the polling coordinator dispatches explicit refresh commands and does not fetch provider resources.
 
-High-volume diagnostic logs do not automatically belong in D1. Detailed execution diagnostics may be better suited to Workers Logs or another dedicated logging facility. D1 should contain durable operational records that FieldView needs to query and retain.
+## Polling coordinator and direct dispatch
 
-### 3. Runtime State
+A single polling coordinator within the consolidated Worker determines which runtime identities are due for refresh. It owns lifecycle eligibility, target selection, bounded concurrency, overlap prevention, prioritization, and aggregate operation budgets.
 
-**Purpose:** Own canonical state and coordination for individual events and teams.
+For each eligible runtime, the coordinator dispatches an explicit command. It does not fetch provider resources, reconcile canonical state, or construct provider deltas. Each runtime performs its own acquisition, validators, reconciliation, persistence, and publication.
 
-Responsibilities:
-- Canonical EventState and TeamState.
-- Provider endpoint state and ETags.
-- Canonical revisions and snapshots.
-- Provider-response reconciliation and delta generation.
-- Runtime-specific coordination and persistence.
-- Multiplexer subscription and connection coordination.
+Direct bounded dispatch is the default. Cloudflare Queues are not part of the refresh path. Reconsider a Queue only if measured throughput, backpressure, or reliability requirements justify its operational and quota costs.
 
-**Storage:** Durable Objects with SQLite-backed storage.
+## Readiness and public reads
 
-EventRuntime and TeamRuntime remain authoritative for their respective canonical state. Multiplexer Durable Objects remain responsible for real-time subscription coordination.
+Initialization Workflows register new runtime identities and perform the one-time bootstrap described above. Their durable outcomes record whether the initial provider endpoint resources were acquired and imported.
 
-## Runtime abstraction and refresh ownership
-
-EventRuntime and TeamRuntime are two scopes of the same runtime abstraction. They are not separate architectural patterns. Both implement the same lifecycle and refresh contract; their differences are limited to identity, owned resources, canonical state, reconciliation rules, and scope-specific derived outputs.
-
-The shared runtime contract is:
-1. Accept an explicit refresh command for the runtime's own identity and scope.
-2. Load its own canonical working state and persisted provider validators.
-3. Fetch its own provider resources directly, using applicable conditional validators.
-4. Reconcile accepted responses against its latest working state.
-5. Persist only meaningful canonical changes and required recovery checkpoints.
-6. Publish versioned, data-bearing changes when appropriate.
-7. Preserve last-good canonical state on failed or partial acquisition, and treat HTTP 304 as a strict no-op.
-
-EventRuntime owns event-scoped resources and canonical event state. TeamRuntime owns team-scoped resources, team/season state, team/event state, and team-scoped analytics. Neither runtime fetches or persists resources owned by the other. Cross-runtime dependencies use explicit versioned references or operation-specific inputs, not ownership transfer.
-
-### Polling coordinator and direct dispatch
-
-A single polling coordinator (implemented within the consolidated FieldView Worker deployment) determines which runtime identities need refresh and when. It is responsible for lifecycle eligibility, bounded concurrency, overlap prevention, prioritization, and aggregate operation budgets. It does not fetch provider resources, reconcile canonical state, or construct runtime deltas.
-
-For each eligible event, the coordinator sends a refresh command to that EventRuntime. When an event update affects team-scoped projections, the coordinator identifies the affected team keys and sends refresh commands to those TeamRuntimes as well. The EventRuntime does not relay webhooks or dispatch work to TeamRuntime; scope routing belongs at the coordinator/Worker ingress boundary.
-
-EventRuntime refresh does not automatically imply refreshing every participating TeamRuntime. Only teams whose owned projections are affected should be dispatched. Event participant rosters and match alliance membership can provide the affected team set where appropriate.
-
-Direct bounded dispatch is the default. A Queue is not required merely to batch runtime refresh requests. Do not introduce Queue infrastructure, message persistence, deduplication, retry, and consumer machinery without measured evidence that direct dispatch cannot meet throughput, backpressure, or reliability requirements. The coordinator may process targets in bounded sequential or concurrent groups while preserving per-runtime overlap protection. A Queue may be reconsidered only when an observed requirement justifies its additional operational and quota costs.
-
-A refresh command is an explicit request for the target runtime to update itself; it is not a payload batch containing provider responses. Each runtime owns provider acquisition, validators, reconciliation, persistence, and publication. A coordinator dispatching a command must not claim that the refresh completed until the runtime reports its outcome.
-
-## Readiness orchestration
-
-Event readiness and Team readiness remain independently scoped Workflows where their discovery and coverage requirements differ. They inspect durable publication/source coverage and report which runtimes require refresh; they do not themselves dispatch provider refreshes. The polling coordinator owns all live refresh timing and dispatch, using the shared runtime command contract. Workflow execution records belong to System Records, not Discovery.
+Public reads do not initialize runtimes, acquire providers, schedule work, or write Durable Object storage. A read of EventState or TeamState derives the projection from the owning runtime's provider endpoint records. Readiness is not gated on a persisted normalized-state publication.
 
 ## Architectural boundaries
 
 1. Discovery owns discovery data only.
-2. System Records owns durable records about system operations, not canonical event/team state.
-3. Runtime Durable Objects own canonical event/team state and per-runtime coordination.
-4. Discovery and System Records may initially share one D1 database, but must have separate schemas, repository interfaces, and domain ownership.
-5. KV is suitable for lightweight projections, not canonical state, transactional coordination, or authoritative operational history.
-6. Cross-product operations are not assumed to be atomic. D1, KV, and Durable Object updates require explicit consistency and recovery strategies.
-7. Persistent reads must remain side-effect-free. No hidden writes, TTL refreshes, lazy initialization, read-time migrations, counters, or unchanged-state rewrites.
-8. Persistent mutations must be explicit, auditable, documented, and attributable to an operation and reason.
-9. Storage workloads and daily usage must be budgeted independently for D1, KV, and Durable Objects.
+2. System Records owns records about system operations, not canonical event/team data.
+3. EventRuntime and TeamRuntime own their respective provider endpoint records and scope-local canonical facts.
+4. Cross-runtime references are logical references resolved through owner interfaces; callers do not access another runtime's SQLite storage.
+5. KV is for lightweight projections and pointers, not canonical provider records or transactional coordination.
+6. Persistent reads remain side-effect-free. No hidden writes, lazy initialization, TTL refreshes, read-time migrations, or unchanged-state rewrites.
+7. Persistent mutations are explicit, auditable, and attributable to an operation.
+8. Storage workloads and usage budgets are reviewed independently for D1, KV, and Durable Objects.
 
-## Rationale
+## Consequences
 
-The initial branch implementation placed unrelated responsibilities inside one DiscoveryStore Durable Object. The migration replaces it with an in-process DiscoveryService and two simple D1 record tables. Discovery and System Records now have separate repository ownership, while EventRuntime and TeamRuntime retain their own canonical Durable Object storage.
+This separation keeps provider acquisition with the runtime that owns the data after initialization, keeps discovery and operations out of runtime storage, and avoids making client reads depend on previously materialized normalized state. The first-registration exception solves the observed cold-hydration problem without creating a second ongoing provider-acquisition system.
 
-Separating the domains:
-- Isolates storage workloads and their respective quotas.
-- Makes ownership and mutation paths easier to audit.
-- Prevents operational recordkeeping from consuming runtime persistence capacity.
-- Allows independent retention, indexing, and access policies.
-- Keeps each repository focused on one responsibility.
-- Keeps provider fetching and canonical reconciliation with the runtime that owns the data.
-
-## Migration consequences
-
-Implementation status:
-- The former DiscoveryStore key families and callers have been inventoried in the source audit.
-- Discovery and System Records are stored in separate generic D1 tables through separate repositories; key families are classified by ownership.
-- EventRuntime and TeamRuntime canonical state remains in the owning Durable Objects.
-- The old DiscoveryStore Durable Object and its Worker/Preview bindings have been removed from the migration branch.
-- The former Durable Object was never deployed or populated, so no record import or data-preserving rollback is required.
-- Retention policy, Cloudflare telemetry, and observed storage budgets remain follow-up work.
-- The D1 migration still requires local validation and explicit approval before any remote application.
-
-This is an architecture decision, not authorization to deploy resources, change Cloudflare settings, or perform the data migration.
-
-## Related decisions
-
-- Only `events-this-week` is maintained as the weekly event candidate set; a separate `events-in-progress` list is not required.
-- Event eligibility is evaluated by the dispatcher at dispatch time using event-local date boundaries.
-- The weekly candidate list is refreshed every Monday at 16:00 UTC and can also be manually refreshed through the admin interface. The projection window rolls at that UTC boundary, remains the candidate set through the following Sunday in event-local time, and the polling coordinator re-evaluates lifecycle eligibility on every dispatch.
-- Cloudflare does not provision isolated Workflow instances for Worker Previews. Keep the weekly projection Workflow binding in the top-level production configuration only; do not bind a Preview to the production Workflow. Manual weekly refresh is unavailable in branch Previews until an isolated non-production Workflow strategy exists.
-- EventRuntime performs its own TBA resource fetching, reconciliation, delta generation, and persistence.
-- Event and Team readiness remain separate Workflows.
-- HTTP 304 responses are strict no-ops, and unchanged canonical state is not rewritten.
+See [ADR-0020](../decisions/ADR-0020-ephemeral-state-projections-and-snapshot-first-stream.md) for the complete read/realtime contract and [the production integration gate](../MIGRATION-PLAN.md) for validation requirements.
