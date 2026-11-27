@@ -241,7 +241,7 @@ export class TeamRuntime extends DurableObjectBase {
         return Response.json({ error: "Invalid team bootstrap bundle" }, { status: 400 });
       }
       const allowed = new Set(this.endpoints(year).map((resource) => resource.endpoint));
-      if (body.resources.some((resource) => !allowed.has(resource.endpoint))) {
+      if (body.resources.length !== allowed.size || body.resources.some((resource) => !allowed.has(resource.endpoint))) {
         return Response.json({ error: "Bootstrap contains an unrecognized team resource" }, { status: 400 });
       }
       const receipt = await this.storage.transaction(async (tx) => {
@@ -251,7 +251,7 @@ export class TeamRuntime extends DurableObjectBase {
         if (previous && previous.acquired_at > body.acquired_at) return null;
         const existing = await Promise.all(body.resources.map((resource) => tx.get<TeamEndpointState<unknown>>(endpointKey(resource.endpoint))));
         if (existing.some((resource) => resource?.lastFetchedAt !== null && resource?.lastFetchedAt !== undefined &&
-            resource.lastFetchedAt > body.acquired_at)) return null;
+            (resource.lastFetchedAt > body.acquired_at || (resource.lastWebhookAt !== null && resource.lastWebhookAt !== undefined && resource.lastWebhookAt > body.acquired_at)))) return null;
         for (const resource of body.resources) await tx.put(endpointKey(resource.endpoint), {
           ...resource, lastHttpStatus: resource.status === "available" ? 200 : null, lastError: null,
         });
