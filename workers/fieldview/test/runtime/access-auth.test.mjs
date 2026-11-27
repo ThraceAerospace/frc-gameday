@@ -107,3 +107,43 @@ test("rejects non-RS256 algorithms, malformed tokens, and invalid signatures", a
   const invalidSignature = await tokenFor({}, otherPair.privateKey);
   assert.equal(await isCloudflareAccessAdmin(await requestFor(invalidSignature), environment(), now), false);
 });
+
+
+test("allows explicit local admin access only on plain-HTTP loopback hosts", async () => {
+  const localEnvironment = environment({ LOCAL_ADMIN_AUTH: "true" });
+  for (const url of [
+    "http://localhost:8787/internal/admin/overview",
+    "http://127.0.0.1:8787/internal/admin/overview",
+    "http://[::1]:8787/internal/admin/overview",
+  ]) {
+    assert.equal(await isCloudflareAccessAdmin(new Request(url), localEnvironment, now), true, url);
+  }
+});
+
+test("local admin bypass requires the explicit flag and rejects non-loopback or HTTPS hosts", async () => {
+  const enabled = environment({ LOCAL_ADMIN_AUTH: "true" });
+  for (const url of [
+    "https://localhost/internal/admin/overview",
+    "http://localhost.example.com/internal/admin/overview",
+    "http://192.168.1.20:8787/internal/admin/overview",
+    "https://runtime.example/internal/admin/overview",
+  ]) {
+    assert.equal(await isCloudflareAccessAdmin(new Request(url), enabled, now), false, url);
+  }
+  assert.equal(
+    await isCloudflareAccessAdmin(
+      new Request("http://localhost:8787/internal/admin/overview"),
+      environment({ LOCAL_ADMIN_AUTH: "false" }),
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    await isCloudflareAccessAdmin(
+      new Request("http://localhost:8787/internal/admin/overview"),
+      environment(),
+      now,
+    ),
+    false,
+  );
+});
