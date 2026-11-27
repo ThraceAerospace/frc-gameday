@@ -48,6 +48,13 @@ export interface RuntimeEnvironment {
   ASSETS?: { fetch(request: Request): Promise<Response> };
   /** Environment-specific D1 database (production or Preview test database). */
   DB?: D1DatabaseLike;
+  /** Injectable record adapter used only by isolated runtime tests. */
+  DISCOVERY_STORAGE?: {
+    get<T = unknown>(key: string): Promise<T | undefined>;
+    put<T = unknown>(key: string, value: T): Promise<void>;
+    list<T = unknown>(options?: { prefix?: string; startAfter?: string; limit?: number }): Promise<Map<string, T>>;
+    delete(key: string): Promise<boolean>;
+  };
   /** Injectable record adapter for isolated runtime tests; production uses DB. */
   DISCOVERY_STORAGE?: {
     get<T = unknown>(key: string): Promise<T | undefined>;
