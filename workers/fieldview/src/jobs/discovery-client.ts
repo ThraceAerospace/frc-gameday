@@ -10,8 +10,9 @@ export interface DiscoveryServiceClient {
 
 /** Direct in-process access to the D1 discovery and system record repositories. */
 export function createDiscoveryServiceClient(env: RuntimeEnvironment): DiscoveryServiceClient {
-  if (!env.DB) throw new Error("D1 database binding is unavailable");
-  const service = new DiscoveryService(env.DB, env);
+  const storage = env.DISCOVERY_STORAGE ?? env.DB;
+  if (!storage) throw new Error("D1 database binding is unavailable");
+  const service = new DiscoveryService(storage, env);
   return {
     async get<T>(key: string): Promise<T | null> {
       const value = await service.getRecord(key);
