@@ -173,11 +173,11 @@ The full catalog dispatch in `workers/fieldview/src/runtime/discovery-store.ts` 
 - `write-event-chunks`: reads staged event data and writes bounded event-directory chunks.
 - `publish-event-directory`: reads staged data/chunks, writes the event registry and published directory, then relies on later superseded-generation cleanup for old staging/chunks.
 
-The generic API exposes only `GET /get`, `POST /put`, and `GET /list`; there is no generic delete endpoint. The runtime Worker has a second inline implementation of this same API. `get` and `list` are read-only in the inspected implementation. Every generic `put` reads the previous string, writes the new string even when byte-for-byte unchanged, then calls superseded-record cleanup. The catalog's internal `putValue` has the same unconditional write behavior. Prefix cleanup deletes keys in batches of at most 1,000; coverage-audit pointer replacement can therefore trigger a potentially large cleanup operation in the same Durable Object request.
+The former generic HTTP record API and its R2-style object response were removed. Current callers read and write JSON records directly through `DiscoveryServiceClient`; domain catalog acquisition remains a separate in-process operation. D1 repositories own the record tables, and no Durable Object storage facade or public generic record route is exposed.
 
 This confirms three separate mutation concerns to preserve during the future split:
 1. Provider-backed discovery operations and their staged publication lifecycle belong to Discovery.
-2. Workflow/admin/runtime-registration records belong to System Records even though they currently use the same generic `put/get/list` transport.
+2. Workflow/admin/runtime-registration records belong to System Records D1 and are accessed through the typed in-process record client.
 3. No-op semantics and cleanup must be redesigned explicitly in typed repository operations; mechanically moving the current generic API to D1 would preserve the existing hidden-write and unbounded-cleanup risks.
 
 The runtime registration and workflow history/admin routes listed above are read through the same generic API today. The current runtime admin overview/inventory/entity handlers also combine Discovery directory reads with System Records registration-marker reads; their future adapters must query the correct repository for each record family rather than retain a single mixed client.
@@ -240,7 +240,7 @@ Verified against Cloudflare's current official documentation (Durable Objects Pr
 - Each `setAlarm()` is billed as one row written. Alarm invocations are separately included in the Durable Object request count.
 - Deletes count as rows written. The storage API's `delete()` returns whether the key existed, but the pricing page does not explicitly say whether a delete of an absent key incurs a row write. Do not assume either outcome; retain this as an open billing question.
 - Each storage API method is implicitly wrapped in a transaction. Transactions provide atomicity/isolation; they do not make a multi-key operation a single billable row. The pricing documentation says multi-key KV operations are billed as if each key were an individual operation.
-- For direct SQL, Cloudflare exposes `SqlStorageCursor.rowsWritten` for the final SQL billing count, and documents that every row update of an index counts as an additional row written. The current EventRuntime, TeamRuntime, Multiplexer, and DiscoveryStore persistence paths primarily use the KV-compatible API, not direct SQL.
+- For direct SQL, Cloudflare exposes `SqlStorageCursor.rowsWritten` for the final SQL billing count, and documents that every row update of an index counts as an additional row written. The current EventRuntime, TeamRuntime, and Multiplexer persistence paths use their Durable Object SQLite storage APIs; discovery and system records use D1 repositories.
 
 Official references:
 - [Durable Objects Pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/) — storage rows, alarms, deletes, request counts.
