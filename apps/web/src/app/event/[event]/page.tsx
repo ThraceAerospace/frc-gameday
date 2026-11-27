@@ -7,7 +7,7 @@ import {
   type FieldViewPlayoffAlliance,
   type FieldViewTeam,
 } from "@fieldview/domain";
-import { getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
+import { getCanonicalEventDiscovery, getCanonicalEventSnapshot } from "@/lib/events/serverSnapshot";
 import MatchRow from "@/components/match/MatchRow";
 import EventAnalyticsSurface from "@/components/insights/EventAnalyticsSurface";
 import PageContainer from "@/components/ui/PageContainer";
@@ -15,7 +15,6 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionHeading from "@/components/ui/SectionHeading";
 import SurfaceCard from "@/components/ui/SurfaceCard";
 import { formatEventDateRange } from "@/lib/time";
-import PendingSnapshotRefresh from "@/components/runtime/PendingSnapshotRefresh";
 import {
   formatAllianceLongName,
   formatPlayoffMatchGroup,
@@ -54,34 +53,23 @@ export default async function EventPage({
     eventSnapshot = null;
   }
 
-  if (!eventSnapshot) {
-    return (
-      <SiteShell>
-        <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
-          <div className="w-full">
-            <h1 className="text-2xl font-semibold">Event data unavailable</h1>
-            <p className="mt-2 text-[var(--fv-muted)]">
-              Event data is being acquired. This page will update automatically when the first snapshot is ready.
-            </p>
-            <PendingSnapshotRefresh />
-          </div>
-        </div>
-      </SiteShell>
-    );
-  }
-
-  const event: FieldViewEvent | null = eventSnapshot.event ?? null;
-  const teams: FieldViewTeam[] | null = eventSnapshot.teams ?? null;
-  const matches: FieldViewMatch[] | null = eventSnapshot.matches ?? null;
-  const alliances: FieldViewPlayoffAlliance[] | null = eventSnapshot.playoff_alliances ?? null;
+  const fallbackYear = Number(eventKey.slice(0, 4));
+  const fallbackEvents = !eventSnapshot && Number.isInteger(fallbackYear) && fallbackYear >= 1992 && fallbackYear <= 2200
+    ? await getCanonicalEventDiscovery(fallbackYear)
+    : null;
+  const fallbackEvent = fallbackEvents?.find((candidate) => candidate.key === eventKey) ?? null;
+  const event: FieldViewEvent | null = eventSnapshot?.event ?? fallbackEvent;
+  const teams: FieldViewTeam[] | null = eventSnapshot?.teams ?? null;
+  const matches: FieldViewMatch[] | null = eventSnapshot?.matches ?? null;
+  const alliances: FieldViewPlayoffAlliance[] | null = eventSnapshot?.playoff_alliances ?? null;
 
   if (!event) {
+    console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "event", entity_key: eventKey, reason: "event_and_snapshot_unavailable" }));
     return (
       <SiteShell>
         <div className="min-h-full bg-[var(--fv-surface)] px-4 py-8 text-[var(--fv-text)] sm:px-6">
           <h1 className="text-2xl font-semibold">Event unavailable</h1>
-          <p className="mt-2 text-[var(--fv-muted)]">Event details are being acquired. This page will update automatically.</p>
-          <PendingSnapshotRefresh />
+          <p className="mt-2 text-[var(--fv-muted)]">No published TBA event record or FieldView event state is available for this event.</p>
         </div>
       </SiteShell>
     );
@@ -122,13 +110,15 @@ export default async function EventPage({
   ) : null;
 
   const dates = formatEventDateRange(event.start_date, event.end_date);
+  const incompleteReasons = [!eventSnapshot ? "event_state_missing" : null, !teamsAvailable ? "event_teams_missing" : null, !matchesAvailable ? "event_matches_missing" : null].filter((reason): reason is string => reason !== null);
+  if (incompleteReasons.length > 0) console.info("[FV][IncompleteStateServed]", JSON.stringify({ entity_kind: "event", entity_key: eventKey, reasons: incompleteReasons }));
 
   return (
     <SiteShell>
       <div className="min-h-full bg-[var(--fv-surface)] text-[var(--fv-text)]">
-        {!teamsAvailable || !matchesAvailable ? <PendingSnapshotRefresh /> : null}
         <PageContainer>
           <SurfaceCard className="overflow-hidden rounded-2xl">
+            {!eventSnapshot ? <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-5 py-3 text-sm text-[var(--fv-muted)]" role="status">FieldView data for this event is incomplete. Showing the available event information from The Blue Alliance; match, team, and analytics data may be unavailable.</div> : (!teamsAvailable || !matchesAvailable) ? <div className="border-b border-[var(--fv-border)] bg-[var(--fv-surface)] px-5 py-3 text-sm text-[var(--fv-muted)]" role="status">Some FieldView data for this event is unavailable. The information shown below may be incomplete.</div> : null}
             <div className="p-5 sm:p-8">
               <PageHeader
                 eyebrow={event.district?.display_name || "Competition event"}
@@ -204,7 +194,7 @@ export default async function EventPage({
               </SurfaceCard>
             </section>
           ) : activeTab === "analytics" ? (
-            <EventAnalyticsSurface eventKey={event.key} eventName={event.name} initialSnapshot={eventSnapshot} />
+            eventSnapshot ? <EventAnalyticsSurface eventKey={event.key} eventName={event.name} initialSnapshot={eventSnapshot} /> : <SurfaceCard className="mt-6 p-6 text-sm text-[var(--fv-muted)]">Event analytics are unavailable until FieldView has published an event state.</SurfaceCard>
           ) : (
             <section id="matches" className="mt-6">
               <SectionHeading title="Match Schedule" description={matchesAvailable ? `${sortedMatches.length} matches scheduled or recorded.` : "Match data is currently unavailable."} className="mb-3" />
