@@ -6,14 +6,14 @@ import { createDiscoveryServiceClient } from "./discovery-client.ts";
 
 type RefreshKind = "event" | "team";
 type RefreshTask = { kind: RefreshKind; key: string; year: number };
-type RefreshMessage = { version: 1; tasks: RefreshTask[] };
+export type RefreshMessage = { version: 1; tasks: RefreshTask[] };
 type SeasonWorkflowInput = { year: number; requestedAt?: number };
 type ResolverInput = { requestedAt?: number };
 
 interface QueueProducerLike {
   sendBatch(messages: Array<{ body: RefreshMessage }>): Promise<void>;
 }
-interface SeasonEnvironment extends RuntimeEnvironment {
+export interface SeasonEnvironment extends RuntimeEnvironment {
   SEASON_REFRESH_QUEUE?: QueueProducerLike;
   EVENT_SEASON_READINESS: Workflow;
   TEAM_SEASON_READINESS: Workflow;
