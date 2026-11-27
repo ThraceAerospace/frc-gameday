@@ -91,9 +91,9 @@ export default function WorkflowRunsPanel({ authenticated, year, requestedType }
   // Select the newest run automatically so its live status/report is visible
   // immediately after a run is started elsewhere in the admin panel.
   useEffect(() => {
-    if (selected || runs.runs.length === 0) return;
+    if (selected?.workflow_type === type || runs.runs.length === 0) return;
     void loadRun(runs.runs[0]!.workflow_id).catch((cause) => setError(cause instanceof Error ? cause.message : String(cause)));
-  }, [runs, selected, loadRun]);
+  }, [runs, selected, type, loadRun]);
 
   useEffect(() => {
     if (!selected || selected.workflow_type !== type || !["running", "queued"].includes(selected.workflow_status ?? selected.status)) return;
