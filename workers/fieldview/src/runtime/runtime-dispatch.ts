@@ -113,13 +113,24 @@ async function registerRuntimeMarker(env: RuntimeEnvironment, kind: RuntimeKind,
 }
 
 async function readCurrentSeason(env: RuntimeEnvironment): Promise<number | null> {
+  const canonical = await env.KV_BINDING?.get("system/canonical-season.json");
+  if (canonical) {
+    try {
+      const value = JSON.parse(canonical) as { year?: unknown };
+      if (Number.isInteger(value.year) && Number(value.year) >= 1992 && Number(value.year) <= 2200) {
+        return Number(value.year);
+      }
+    } catch { /* Fall back to the persisted discovery record if KV is malformed. */ }
+  }
   const store = env.DISCOVERY_STORAGE ?? (env.DB ? new D1RecordStore(env.DB) : null);
   if (!store) return null;
   const raw = await store.get<string>("discovery/current-season.json");
   if (typeof raw !== "string") return null;
-  const current = JSON.parse(raw) as { year?: unknown };
-  return current && Number.isInteger(current.year) &&
-    Number(current.year) >= 1992 && Number(current.year) <= 2200
-    ? Number(current.year)
-    : null;
+  try {
+    const current = JSON.parse(raw) as { year?: unknown };
+    return current && Number.isInteger(current.year) &&
+      Number(current.year) >= 1992 && Number(current.year) <= 2200
+      ? Number(current.year)
+      : null;
+  } catch { return null; }
 }
