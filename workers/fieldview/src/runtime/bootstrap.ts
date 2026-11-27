@@ -30,7 +30,10 @@ export function validateRuntimeBootstrapBundle(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const bundle = value as Record<string, unknown>;
   if (bundle.version !== 1 || bundle.kind !== expected.kind || bundle.key !== expected.key ||
-      bundle.year !== expected.year || typeof bundle.bootstrap_id !== "string" ||
+      bundle.year !== expected.year ||
+      (expected.kind === "event" && (!/^[0-9]{4}[a-zA-Z0-9_-]+$/.test(expected.key) || !expected.key.startsWith(String(expected.year)))) ||
+      (expected.kind === "team" && !/^frc[0-9]+$/.test(expected.key)) ||
+      typeof bundle.bootstrap_id !== "string" ||
       !/^[a-zA-Z0-9:_-]{1,160}$/.test(bundle.bootstrap_id) ||
       !Number.isSafeInteger(bundle.acquired_at) || !Array.isArray(bundle.resources) ||
       bundle.resources.length < 1 || bundle.resources.length > 32) return false;
@@ -39,7 +42,8 @@ export function validateRuntimeBootstrapBundle(
   for (const item of bundle.resources) {
     if (!item || typeof item !== "object" || Array.isArray(item)) return false;
     const resource = item as Record<string, unknown>;
-    if (typeof resource.endpoint !== "string" || !resource.endpoint.startsWith("/") ||
+    if (!("data" in resource) || !("providerData" in resource) ||
+        typeof resource.endpoint !== "string" || !resource.endpoint.startsWith("/") ||
         resource.endpoint.startsWith("//") || endpoints.has(resource.endpoint) ||
         !["available", "unavailable", "failed", "stale", "unknown"].includes(String(resource.status)) ||
         !Number.isSafeInteger(resource.revision) || Number(resource.revision) < 0 ||
