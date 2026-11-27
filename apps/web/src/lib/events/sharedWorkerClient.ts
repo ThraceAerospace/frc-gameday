@@ -11,7 +11,6 @@ const canonicalAnalytics = new Map<string, CanonicalAnalyticsPublication>();
 const canonicalAnalyticsListeners = new Map<string, Set<SnapshotListener>>();
 const runtimeStatusListeners = new Set<SnapshotListener>();
 let canonicalRuntimeStatus: EventWebSocketStatus = "disconnected";
-let worker: SharedWorker | null = null;
 let port: MessagePort | null = null;
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 let lastPongAt = 0;
@@ -70,7 +69,6 @@ function connect() {
     return;
   }
   const nextPort = nextWorker.port;
-  worker = nextWorker;
   port = nextPort;
   nextPort.onmessage = handleWorkerMessage;
   nextPort.onmessageerror = () => recover(nextPort);
@@ -98,7 +96,6 @@ function recover(expectedPort?: MessagePort) {
   if (expectedPort && port !== expectedPort) return;
   const oldPort = port;
   port = null;
-  worker = null;
   if (heartbeatTimer !== null) clearInterval(heartbeatTimer);
   heartbeatTimer = null;
   try { oldPort?.postMessage({ type: "close" }); } catch { /* Worker may have terminated. */ }
