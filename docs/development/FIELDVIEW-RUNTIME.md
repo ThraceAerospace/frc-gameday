@@ -1,106 +1,100 @@
 # FieldView runtime
 
-This document describes the final migration architecture on `fieldview-architecture-migration`. It replaces older notes about Redis, Vercel WebSockets, R2-compatible discovery objects, per-event WebSocket routes, and persisted normalized-state publications.
+This document describes the runtime lifecycle defined by ADR-0020.
 
 ## Deployment shape
 
-- The backend is one environment-neutral Cloudflare Worker named `runtime`.
-- Worker source and configuration live in `workers/fieldview`, with one `wrangler.toml` and one local `.dev.vars`.
-- Wrangler named environments are not used. Production configuration is top-level; branch and PR Preview URLs use `preview_urls = true`.
-- The Next.js frontend remains on Vercel. Its runtime URL is configured separately in the Vercel project; frontend environment variables do not belong in the Worker `.dev.vars`.
-- No branch resources have been deployed. There is no production data, queue backlog, Redis state, or legacy runtime state to migrate or preserve.
+- One environment-neutral Cloudflare Worker named `runtime`.
+- One Worker project under `workers/fieldview`, one `wrangler.toml`, and one local `.dev.vars`.
+- Production uses the top-level Wrangler configuration. Branch and pull-request validation uses Workers Preview URLs and Preview bindings in the same configuration; Wrangler named environments are not used.
+- The Next.js frontend is hosted separately on Vercel. Vercel does not own provider acquisition, runtime persistence, orchestration, webhooks, or realtime.
+- Runtime source is organized into `src/runtime` and `src/jobs` modules composed by the Worker entrypoint.
 
-## Cloudflare resource ownership
+## Runtime responsibilities
 
-| Resource | Responsibility |
+| Component | Responsibility |
 |---|---|
-| Durable Objects | EventRuntime, TeamRuntime, Multiplexer, RemoteSessionRuntime, and TaskScheduler |
-| D1 | Discovery records and operational/system records |
-| KV | Small, disposable projections and canonical pointers only |
-| Workflows | Discovery, endpoint bootstrap/readiness, polling orchestration, analytics, and administrative operations |
-| Worker Static Assets | Cloudflare admin dashboard |
-| Cron Triggers | Start coordinator/workflow work; they do not poll providers from Durable Object alarms |
+| EventRuntime | Event-scoped provider endpoint records, validators, freshness, reconciliation, canonical event data, and event-wide analytics |
+| TeamRuntime | Team/year-scoped provider endpoint records, validators, freshness, reconciliation, canonical team data, team-event state, and team analytics |
+| Multiplexer | The single public `/stream` WebSocket and shared subscription coordination |
+| RemoteSessionRuntime | Remote display session signaling and session lifecycle |
+| Polling coordinator | Lifecycle cadence, target selection, prioritization, bounded concurrency, overlap prevention, and dispatch of refresh commands |
+| Workflows | Durable discovery, first-registration bootstrap, season ingestion, analytics, and administrative orchestration |
+| D1 repositories | Discovery catalog and operational/system records |
+| KV | Small disposable projections and canonical pointers only |
 
-There is no R2 binding, Cloudflare Queue producer or consumer, Redis binding, or Durable Object alarm polling. Discovery records are accessed through typed in-process D1 JSON-record methods. The old generic R2-shaped `/get`, `/put`, and `/list` HTTP API is not part of the runtime.
+Durable Object alarm polling, Cloudflare Queue refresh paths, Redis, and R2 are not part of this runtime.
 
-## Durable source data and normalized read contracts
+## Provider acquisition lifecycle
 
-EventRuntime owns event-scoped provider endpoint records, including TBA and Statbotics response data, validators, acquisition status, freshness, and revisions.
+### First registration
 
-TeamRuntime owns team/year-scoped provider endpoint records and their acquisition metadata.
+When an event or team is first registered/created, its initialization Workflow may perform one bounded acquisition of the provider endpoint resources needed to hydrate the new runtime. It passes those endpoint records to the owning Durable Object for persistence. This is an intentional one-time exception to runtime-owned acquisition, retained to make first-time hydration reliable.
 
-The provider endpoint records are the durable source of truth. EventState and TeamState are normalized client-facing read models:
+The bootstrap operation:
+- is tied to first registration/creation;
+- is idempotent and bounded;
+- persists provider endpoint records and their validators/status/freshness metadata;
+- does not generate or persist EventState or TeamState;
+- is not used as a recurring refresh path.
 
-1. A client requests `GET /events/:eventKey/snapshot` or `GET /teams/:teamKey/snapshot?year=YYYY`.
-2. The owning Durable Object reads its endpoint records and constructs the requested normalized projection.
-3. A disposable in-memory hot cache may be reused while its source signature matches.
-4. The read returns the projection without writing Durable Object storage or acquiring provider data.
+### Normal operation
 
-The current implementation does not persist normalized EventState or TeamState. Cache eviction simply causes the next read to rebuild from provider endpoint records. Bootstrap workflows acquire missing provider resources only; they do not pre-generate normalized state to make an initial read possible.
+After bootstrap, the owning runtime is the only component that performs ongoing provider requests for its scope. The polling coordinator selects eligible runtimes and sends explicit refresh commands. The runtime fetches provider resources, applies validators, reconciles results, persists meaningful changes, and publishes its updated state. Explicit administrative refreshes and authenticated webhook follow-up may also dispatch runtime-owned work.
 
-Analytics publications and TeamEventState records are separate analytics data with their own persistence contracts. They do not make an EventState or TeamState publication mandatory.
+The coordinator and Workflows may orchestrate work, but must not repeatedly fetch provider resources on behalf of initialized runtimes.
 
-## Provider acquisition and polling
+## Read lifecycle
 
-- Workflows bootstrap missing endpoint resources.
-- The polling coordinator owns ongoing cadence and dispatch.
-- EventRuntime and TeamRuntime do not register alarm handlers or schedule Durable Object alarms.
-- A public snapshot read never calls TBA, Statbotics, or FRC Colors and never dispatches a workflow.
-- Explicit refresh and webhook operations may mutate provider endpoint records and revisions.
-- TBA webhooks enter through the Worker at `POST /webhooks/tba`; signature verification uses the raw request body and `TBA_WEBHOOK_SECRET`.
-
-The current polling policy is centralized in the jobs layer. It is not duplicated as per-DO timers or alarm polling.
-
-## HTTP and realtime routes
-
-Canonical reads:
+Canonical public reads include:
 
 - `GET /events/:eventKey/snapshot`
 - `GET /teams/:teamKey/snapshot?year=YYYY`
 - `GET /events/:eventKey/analytics`
 - `GET /teams/:teamKey/season-analytics?year=YYYY`
-- `GET /events/:eventKey/statbotics-match?match_key=...`
-- `GET /events/discovery?year=YYYY`
-- `GET /teams/discovery?year=YYYY`
 
-Realtime:
+For an EventState or TeamState snapshot, the owning runtime reads its durable provider endpoint records and derives the normalized projection. A disposable in-memory hot cache may be reused when the source signature matches. A cold read or cache eviction simply recomputes the projection.
 
-1. The browser fetches the canonical HTTP snapshot first.
-2. The SharedWorker opens the single public `/stream` WebSocket, owned by Multiplexer.
-3. EventState snapshot changes, team-event patches, and analytics changes are sent as data-bearing notifications.
-4. The SharedWorker applies valid notifications to its in-memory cache.
-5. Reconnect restores subscriptions only. WebSocket acknowledgements, notifications, gaps, and reconnects do not trigger HTTP snapshot or analytics refetches.
+Snapshot reads:
+- do not call TBA, Statbotics, or FRC Colors;
+- do not register or initialize runtimes;
+- do not start Workflows or dispatch refreshes;
+- do not mutate Durable Object storage.
 
-There is no per-event EventRuntime WebSocket endpoint. The SharedWorker does not persist normalized snapshots in IndexedDB. An explicit user refresh or a new client read may make another HTTP request.
+Analytics publications have their own persistence and revision contract. They are not a prerequisite for deriving EventState or TeamState.
+
+## Polling and orchestration
+
+The polling coordinator is a Worker/Jobs responsibility. It evaluates lifecycle policy, selects event/team targets, applies concurrency and request budgets, prevents overlapping refreshes, and dispatches explicit commands. It does not make provider requests.
+
+Workflows own durable multi-step orchestration. First-registration bootstrap is the only permitted Workflow-owned provider acquisition and must not become recurring behavior.
+
+EventRuntime and TeamRuntime do not register Durable Object alarm handlers and do not schedule alarms. There is no Queue producer/consumer in the refresh path.
+
+## HTTP and realtime lifecycle
+
+1. A client reads the canonical HTTP event/team snapshot.
+2. The browser SharedWorker opens or reuses the single Multiplexer-owned `/stream` WebSocket and registers subscriptions.
+3. Runtime state changes are published as data-bearing messages containing the changed EventState snapshot or team-event patch/data plus scope and revision metadata.
+4. Analytics changes carry the committed analytics publication plus revision metadata.
+5. The SharedWorker applies valid, ordered messages to its in-memory cache and fans them out to clients.
+6. Reconnect restores subscriptions only.
+
+Revision-only invalidations are not valid state updates. A notification, acknowledgement, sequence gap, disconnect, or reconnect must never trigger an HTTP snapshot or analytics refetch. A new client/page read or explicit user refresh may perform a new HTTP request. Normalized snapshots are not persisted in browser IndexedDB.
+
+## Webhooks
+
+TBA webhooks enter directly through `POST /webhooks/tba`. The Worker verifies the signature against the raw request body using `TBA_WEBHOOK_SECRET`, validates the event identity, and routes the change to the owning EventRuntime. No Vercel relay or Redis Pub/Sub layer is involved.
 
 ## Local configuration
-
-From the repository root:
 
 ```sh
 cp workers/fieldview/.dev.vars.example workers/fieldview/.dev.vars
 npm run dev:worker
 ```
 
-Set the actual local secrets in `workers/fieldview/.dev.vars`:
+The Worker local file contains server-side secrets and configuration such as `TBA_API_KEY`, `TBA_WEBHOOK_SECRET`, and admin credentials. Frontend runtime URL configuration is managed independently in Vercel. Never expose Worker secrets to the browser.
 
-- `TBA_API_KEY`
-- `TBA_WEBHOOK_SECRET`
-- `RUNTIME_ADMIN_TOKEN`
-- `STATBOTICS_API_BASE_URL` when using a non-default Statbotics endpoint
+## Production integration gate
 
-The frontend separately needs `NEXT_PUBLIC_FIELDVIEW_RUNTIME_URL` in its Vercel environment. Do not duplicate Worker secrets into the frontend.
-
-## Final integration gate
-
-Before merging to `main`, validate a clean Cloudflare Preview deployment end to end:
-
-1. Apply and verify the D1 migrations and bindings.
-2. Deploy the Worker Preview and verify all configured DO, D1, KV, Workflow, Cron, and Static Asset bindings.
-3. Run provider bootstrap and confirm endpoint records are written.
-4. Read event and team snapshots cold, warm, and after DO eviction; verify reads produce normalized state without Durable Object writes.
-5. Verify polling and webhook updates reach the correct runtime records.
-6. Verify browser order is snapshot then stream, data-bearing WSS updates apply, and no WSS message or reconnect causes an HTTP refetch.
-7. Inspect Durable Object write counts and confirm no alarm polling or queue traffic.
-
-This branch has not been deployed. Successful repository CI is not a substitute for the Preview end-to-end gate. Production deployment and merge remain separate, explicit steps.
+See [the production integration and cutover plan](../architecture/MIGRATION-PLAN.md). Repository CI does not replace deployed Preview verification.
