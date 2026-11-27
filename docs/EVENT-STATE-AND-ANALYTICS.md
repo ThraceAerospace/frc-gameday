@@ -45,7 +45,7 @@ Revision checks reject stale inputs and prevent publication regression. Workflow
 
 ## Realtime lifecycle
 
-The browser obtains the initial snapshot through the Runtime Worker and then subscribes to `/stream`. The origin-wide SharedWorker owns one stream connection and fans canonical snapshot/analytics updates to tabs. On reconnect, it re-registers subscriptions and performs conditional snapshot recovery. It does not acquire provider resources, maintain a second EventState model, or run periodic REST polling.
+The browser obtains the initial snapshot through the Runtime Worker and then subscribes to `/stream`. The origin-wide SharedWorker owns one stream connection and fans canonical snapshot/analytics updates to tabs. The initial HTTP snapshot is fetched before the stream is opened. On reconnect, the SharedWorker only re-registers subscriptions; data-bearing WebSocket notifications never trigger HTTP snapshot or analytics refetches. Explicit refresh actions remain HTTP reads. It does not acquire provider resources, maintain a second EventState model, or run periodic REST polling.
 
 ## Operational invariants
 
