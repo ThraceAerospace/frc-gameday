@@ -164,7 +164,7 @@ export async function isCloudflareAccessAdmin(
     console.warn("[AUTH] Cloudflare Access administrator verification rejected", { reason });
     return false;
   };
-n  const issuer = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
+  const issuer = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
   const audience = env.CF_ACCESS_AUD?.trim();
   const allowlist = configuredAdminEmails(env.RUNTIME_ADMIN_EMAILS);
   const token = request.headers.get("Cf-Access-Jwt-Assertion");
