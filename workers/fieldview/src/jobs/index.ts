@@ -123,9 +123,12 @@ async function registerDiscoveredRuntimes(
     kind === "event" ? /^[a-zA-Z0-9_-]+$/.test(key) : /^frc[0-9]+$/.test(key));
   const missing = validKeys.filter((key) => !existing.has(key));
   let initialized = 0;
-  for (let offset = 0; offset < missing.length; offset += 25) {
-    const chunk = missing.slice(offset, offset + 25);
-    await step.do(operationPrefix + "-initialize-" + String(offset / 25).padStart(4, "0"), async () => {
+  // Each registration performs a Durable Object fetch and a registry write.
+  // Keep batches comfortably below the Workers per-invocation API request limit.
+  const registrationBatchSize = 10;
+  for (let offset = 0; offset < missing.length; offset += registrationBatchSize) {
+    const chunk = missing.slice(offset, offset + registrationBatchSize);
+    await step.do(operationPrefix + "-initialize-" + String(offset / registrationBatchSize).padStart(4, "0"), async () => {
       let count = 0;
       for (const key of chunk) {
         const stub = namespace.get(namespace.idFromName(key));
