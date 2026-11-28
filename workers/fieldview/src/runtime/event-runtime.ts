@@ -619,15 +619,22 @@ export class EventRuntime extends DurableObjectBase {
     if (request.method === "POST" && url.pathname === "/participants") {
       // EventRuntime owns the event-participant provider resource. Coordinators
       // may request readiness, but never call TBA directly for the roster.
+      const body: unknown = await request.json().catch(() => null);
+      const requestedInterval = isRecord(body) ? body.minimumIntervalMs : undefined;
+      const minimumIntervalMs = typeof requestedInterval === "number" &&
+        Number.isSafeInteger(requestedInterval) && requestedInterval >= 1_000 &&
+        requestedInterval <= 24 * 60 * 60_000 ? requestedInterval : 0;
       const endpoint = TBA_ENDPOINTS.eventTeams(this.eventKey);
       let state = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
+      const attemptedRecently = Boolean(state && state.lastAttemptAt !== null &&
+        Date.now() - state.lastAttemptAt < minimumIntervalMs);
       if (!state || state.status !== "available" ||
           (state.lastFetchedAt == null && state.lastWebhookAt == null) ||
           (state.expiresAt !== null && state.expiresAt <= Date.now()) || !Array.isArray(state.data)) {
-        await this.pollEndpoint(endpoint);
+        if (!attemptedRecently) await this.pollEndpoint(endpoint);
         const refreshed = await this.storage.get<EndpointState<TBATeam[]>>(endpointStorageKey(endpoint));
         if (!refreshed || refreshed.status !== "available" || !Array.isArray(refreshed.data)) {
-          return Response.json({ ready: false, status: refreshed?.status ?? "pending" }, {
+          return Response.json({ ready: false, status: refreshed?.status ?? "pending", retry_after_ms: attemptedRecently ? minimumIntervalMs : null }, {
             status: 503, headers: { "Cache-Control": "no-store" },
           });
         }
