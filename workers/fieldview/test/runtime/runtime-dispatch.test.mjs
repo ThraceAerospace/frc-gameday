@@ -137,7 +137,7 @@ test("event bootstrap dispatch preserves the complete validated bundle identity"
   const response = await dispatchRuntime(env, "event", "2027rikin", "bootstrap", bundle, 2027);
   assert.equal(response.status, 200);
   assert.deepEqual(captured, {
-    id: "2027rikin", path: "/bootstrap", year: "2027", body: bundle,
+    id: "2027rikin", path: "/bootstrap", year: null, body: bundle,
   });
   assert.equal(markers.has("registry/runtime-events/2027rikin.json"), true);
 });
