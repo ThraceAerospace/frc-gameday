@@ -160,6 +160,30 @@ async function isRuntimeRegistered(
   return Boolean(await store.get(prefix + key + ".json"));
 }
 
+async function ensureTeamRuntimeRegistered(
+  env: PollingEnvironment,
+  store: DiscoveryServiceClient,
+  teamKey: string,
+): Promise<boolean> {
+  if (await isRuntimeRegistered(store, "team", teamKey)) return true;
+  if (!env.TEAM_RUNTIME) return false;
+  const stub = env.TEAM_RUNTIME.get(env.TEAM_RUNTIME.idFromName(teamKey));
+  const response = await stub.fetch(new Request("https://team-runtime/register", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
+      "X-FieldView-Team-Key": teamKey,
+    },
+  }));
+  if (!response.ok) throw new Error("TeamRuntime registration failed for " + teamKey + " with HTTP " + response.status);
+  await store.put("registry/runtime-teams/" + teamKey + ".json", JSON.stringify({
+    year: Number(teamKey.slice(3, 7)) || null,
+    registered_at: Date.now(),
+    source: "active-event-roster",
+  }));
+  return true;
+}
+
 async function mapLimit<T, R>(
   items: T[],
   limit: number,
@@ -358,17 +382,16 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           }
 
           let participantKeys: string[] = [];
-          if (pollTeams) {
-            // EventRuntime owns the participant resource. The daily team pass
-            // asks for the roster once per event, not on every live poll tick.
-            const participantsResponse = await dispatchRuntime(this.env, "event", eventKey, "participants", {}, discovery.year);
-            if (participantsResponse.ok && participantsResponse.status !== 204) {
-              const participants = await participantsResponse.json() as { team_keys?: unknown };
-              participantKeys = [...new Set((Array.isArray(participants.team_keys) ? participants.team_keys : [])
-                .filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))];
-            } else if (!error) {
-              error = "Participant roster unavailable (HTTP " + participantsResponse.status + ")";
-            }
+          // Roster membership is needed to initialize participating TeamRuntimes
+          // as soon as an event enters this-week. EventRuntime owns any provider
+          // acquisition required to make its participant resource available.
+          const participantsResponse = await dispatchRuntime(this.env, "event", eventKey, "participants", {}, discovery.year);
+          if (participantsResponse.ok && participantsResponse.status !== 204) {
+            const participants = await participantsResponse.json() as { team_keys?: unknown };
+            participantKeys = [...new Set((Array.isArray(participants.team_keys) ? participants.team_keys : [])
+              .filter((key): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key)))];
+          } else if (!error) {
+            error = "Participant roster unavailable (HTTP " + participantsResponse.status + ")";
           }
           return {
             event_key: eventKey,
@@ -413,24 +436,17 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       for (const teamKey of result.participant_team_keys ?? []) participantTeamKeys.add(teamKey);
     }
 
-    // Team profiles are acquired from the complete TBA team directory, not
-    // only from teams that have appeared on an active event roster. The same
-    // rotating budget makes this a gradual one-time fill rather than a burst.
-    const initialTeamDirectory = await step.do("load-initial-team-acquisition-directory", async () =>
-      readJson<unknown>(store(), "registry/teams/" + discovery.year + ".json"),
-    );
-    const allDiscoveredTeamKeys = Array.isArray(initialTeamDirectory)
-      ? [...new Set(initialTeamDirectory.filter((key): key is string =>
-          typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
-      : [];
+    // TeamRuntime initialization is lazy and roster-driven. The independent
+    // season seed workflow can fill the broader team directory; this coordinator
+    // initializes only teams currently named by active EventRuntime rosters.
     const initialTeamCandidates = selectBudgetedKeys(
-      allDiscoveredTeamKeys,
+      [...participantTeamKeys],
       MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
       Math.floor(scheduledAt / (5 * 60_000)),
     );
     const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" } }, async () =>
       mapLimit(initialTeamCandidates, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, async (teamKey) => {
-        if (!await isRuntimeRegistered(store(), "team", teamKey)) {
+        if (!await ensureTeamRuntimeRegistered(this.env, store(), teamKey)) {
           return { key: teamKey, status: "unregistered" as const };
         }
         const readiness = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
