@@ -6,7 +6,7 @@ import { dispatchRuntimeRefresh, dispatchRuntimeRefreshBatch } from "../runtime/
 import type { EventAnalyticsRefreshRequest } from "../runtime/runtime-refresh.ts";
 import { isValidEventLifecycleInput } from "./calendar.ts";
 import type { TbaEvent } from "./calendar.ts";
-import { selectActiveEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, selectInitialEventCandidates, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
+import { selectThisWeekEvents, selectPollingCandidates, selectBudgetedKeys, selectBudgetedItems, selectInitialEventCandidates, isEventAnalyticsRecoveryDue, MAX_EVENT_CANDIDATES_PER_RUN, MAX_INITIAL_EVENT_ACQUISITIONS_PER_RUN, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, MAX_TEAM_READINESS_CHECKS_PER_RUN, MAX_TEAM_REFRESH_COMMANDS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_CHECKS_PER_RUN, MAX_PENDING_ANALYTICS_RECOVERY_EVENTS_PER_RUN } from "./polling-policy.ts";
 import { createDiscoveryServiceClient, type DiscoveryServiceClient } from "./discovery-client.ts";
 import { utcProjectionWeekWindow } from "./weekly-projection.ts";
 import { AnalyticsExecutionRepository } from "./analytics-executions.ts";
@@ -137,7 +137,7 @@ interface CurrentSeason {
 }
 interface PollingEventResult {
   event_key: string;
-  lifecycle: "active";
+  lifecycle: "active" | "upcoming";
   event_refresh: "not_due" | "succeeded" | "failed" | "unavailable";
   participant_team_keys?: string[];
   affected_team_keys?: string[] | null;
@@ -245,15 +245,15 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
 
     const projectionEvents = discovery.events.filter((item) =>
       item && typeof item.key === "string" && item.key.startsWith(String(discovery.year)));
-    const allActiveEvents = selectActiveEvents(projectionEvents, scheduledAt);
+    const allThisWeekEvents = selectThisWeekEvents(projectionEvents, scheduledAt);
     const configuredEventInterval = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
     const eventRotationInterval = Number.isFinite(configuredEventInterval) && configuredEventInterval > 0
       ? configuredEventInterval : 5 * 60_000;
     const eventRotationSlot = Math.floor(scheduledAt / eventRotationInterval);
     const eventTargetKeys = new Set(selectBudgetedItems(
-      allActiveEvents, MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
+      allThisWeekEvents, MAX_EVENT_CANDIDATES_PER_RUN, eventRotationSlot,
     ).map((item) => item.key));
-    const eventRegistrationCandidates = allActiveEvents.filter((item) => eventTargetKeys.has(item.key));
+    const eventRegistrationCandidates = allThisWeekEvents.filter((item) => eventTargetKeys.has(item.key));
     const registeredEventKeys = await step.do("check-budgeted-event-runtime-registration", async () => {
       const checks = await mapLimit(eventRegistrationCandidates, 4, async (item) => ({
         key: item.key,
@@ -322,7 +322,11 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
         try {
-          const minimumIntervalMs = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
+          const configuredInterval = candidate.lifecycle === "upcoming"
+            ? this.env.EVENT_UPCOMING_INTERVAL_MS
+            : this.env.EVENT_ACTIVE_INTERVAL_MS;
+          const minimumIntervalMs = Number(configuredInterval ??
+            (candidate.lifecycle === "upcoming" ? 30 * 60_000 : 5 * 60_000));
           const readiness = await dispatchRuntime(this.env, "event", eventKey, "readiness", {
             minimumIntervalMs,
             require_full_hydration: true,
@@ -726,7 +730,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       current_season: discovery.year,
       week_projection_run_at: discovery.projectionRunAt,
       weekly_event_candidates_total: projectionEvents.length,
-      eligible_events: allActiveEvents.length,
+      eligible_events: allThisWeekEvents.length,
       initial_event_candidates: initialEventCandidates.length,
       initial_event_states_acquired: initialEventAcquisitions.filter((item) => item.status === "acquired").length,
       initial_event_states_already_published: initialEventAcquisitions.filter((item) => item.status === "already_published").length,
@@ -736,7 +740,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       initial_team_states_already_published: initialTeamAcquisitions.filter((item) => item.status === "already_published").length,
       initial_team_states_unregistered: initialTeamAcquisitions.filter((item) => item.status === "unregistered").length,
       event_registry_checks_processed: eventRegistrationCandidates.length,
-      event_registry_checks_deferred_by_budget: Math.max(0, allActiveEvents.length - eventRegistrationCandidates.length),
+      event_registry_checks_deferred_by_budget: Math.max(0, allThisWeekEvents.length - eventRegistrationCandidates.length),
       event_candidates_processed: candidates.length,
       event_candidates_not_registered: eventRegistrationCandidates.length - candidates.length,
       events_refreshed: results.filter((item) => item.event_refresh === "succeeded").length,
