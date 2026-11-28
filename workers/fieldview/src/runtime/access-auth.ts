@@ -37,9 +37,12 @@ interface CachedJwks {
 }
 
 class AccessVerificationError extends Error {
-  constructor(readonly reason: string) {
+  readonly reason: string;
+
+  constructor(reason: string) {
     super(reason);
     this.name = "AccessVerificationError";
+    this.reason = reason;
   }
 }
 
