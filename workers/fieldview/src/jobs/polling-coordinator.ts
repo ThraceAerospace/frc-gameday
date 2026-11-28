@@ -164,6 +164,7 @@ async function ensureTeamRuntimeRegistered(
   env: PollingEnvironment,
   store: DiscoveryServiceClient,
   teamKey: string,
+  year: number,
 ): Promise<boolean> {
   if (await isRuntimeRegistered(store, "team", teamKey)) return true;
   if (!env.TEAM_RUNTIME) return false;
@@ -177,7 +178,7 @@ async function ensureTeamRuntimeRegistered(
   }));
   if (!response.ok) throw new Error("TeamRuntime registration failed for " + teamKey + " with HTTP " + response.status);
   await store.put("registry/runtime-teams/" + teamKey + ".json", JSON.stringify({
-    year: Number(teamKey.slice(3, 7)) || null,
+    year,
     registered_at: Date.now(),
     source: "active-event-roster",
   }));
@@ -446,7 +447,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
     );
     const initialTeamAcquisitions = await step.do("acquire-missing-initial-team-states", { retries: { limit: 2, delay: "10 seconds", backoff: "exponential" } }, async () =>
       mapLimit(initialTeamCandidates, MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN, async (teamKey) => {
-        if (!await ensureTeamRuntimeRegistered(this.env, store(), teamKey)) {
+        if (!await ensureTeamRuntimeRegistered(this.env, store(), teamKey, discovery.year)) {
           return { key: teamKey, status: "unregistered" as const };
         }
         const readiness = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
