@@ -322,11 +322,13 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       const eventKey = candidate.event.key;
       const result = await step.do("poll-event-" + eventKey, async (): Promise<PollingEventResult> => {
         try {
-          const configuredInterval = candidate.lifecycle === "upcoming"
-            ? this.env.EVENT_UPCOMING_INTERVAL_MS
-            : this.env.EVENT_ACTIVE_INTERVAL_MS;
-          const minimumIntervalMs = Number(configuredInterval ??
-            (candidate.lifecycle === "upcoming" ? 30 * 60_000 : 5 * 60_000));
+          const configuredInterval = Number(candidate.lifecycle === "upcoming"
+            ? this.env.EVENT_UPCOMING_INTERVAL_MS ?? 30 * 60_000
+            : this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
+          const defaultInterval = candidate.lifecycle === "upcoming" ? 30 * 60_000 : 5 * 60_000;
+          const minimumIntervalMs = Number.isSafeInteger(configuredInterval) &&
+            configuredInterval >= 1_000 && configuredInterval <= 24 * 60 * 60_000
+            ? configuredInterval : defaultInterval;
           const readiness = await dispatchRuntime(this.env, "event", eventKey, "readiness", {
             minimumIntervalMs,
             require_full_hydration: true,
