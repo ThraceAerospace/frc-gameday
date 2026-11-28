@@ -1214,3 +1214,43 @@ test("EventRuntime baseline readiness is independent from deferred competition h
   assert.equal(fullBody.hydration_scope, "full");
   assert.ok(fullBody.stale_sources.length > 0);
 });
+
+
+test("EventRuntime accepts exactly the minimal event bootstrap resource set", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2027seed";
+  const now = Date.now();
+  const resource = (endpoint) => ({
+    endpoint, status: "available", data: {}, providerData: {}, etag: null,
+    lastFetchedAt: now, expiresAt: null, revision: 1, validatorRevision: 1,
+    lastAttemptAt: now, lastWebhookAt: null,
+  });
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key", RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => { throw new Error("bootstrap handoff must not fetch providers"); },
+  });
+  const request = (resources, bootstrapId) => new Request("https://event-runtime/bootstrap", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      version: 1, bootstrap_id: bootstrapId, kind: "event", key: eventKey,
+      year: 2027, acquired_at: now, resources,
+    }),
+  });
+  const baseline = await runtime.fetch(request([
+    resource(TBA_ENDPOINTS.event(eventKey)),
+    resource(TBA_ENDPOINTS.eventTeams(eventKey)),
+  ], "test:event-baseline"));
+  assert.equal(baseline.status, 200);
+  assert.equal((await baseline.json()).accepted, true);
+  const extra = await runtime.fetch(request([
+    resource(TBA_ENDPOINTS.event(eventKey)),
+    resource(TBA_ENDPOINTS.eventTeams(eventKey)),
+    resource(TBA_ENDPOINTS.eventMatches(eventKey)),
+  ], "test:event-extra"));
+  assert.equal(extra.status, 400, "competition resources cannot be smuggled into baseline bootstrap");
+});
