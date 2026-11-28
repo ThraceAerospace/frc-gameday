@@ -178,14 +178,15 @@ async function runSeasonReadiness(
     states_valid: results.filter((item) => item.state_valid).length,
     bootstrapped: results.filter((item) => item.bootstrapped).length,
     already_initialized: results.filter((item) => item.already_initialized).length,
-    bootstrap_failed: results.filter((item) => !item.bootstrapped && !item.already_initialized).length,
+    bootstrap_failed: results.filter((item) => !item.state_valid).length,
     partial_resource_sets: results.filter((item) => item.resource_status === "partial").length,
     failed_resource_sets: results.filter((item) => item.resource_status === "failed").length,
     readiness_errors: results.filter((item) => item.error).length,
   };
   const resultChunks = Math.ceil(results.length / 100);
   const completed = {
-    ...initial, status: summary.readiness_errors || summary.failed_resource_sets ? "completed_with_errors" : "completed",
+    ...initial, status: summary.readiness_errors || summary.failed_resource_sets ||
+      summary.states_valid !== summary.entities_total ? "completed_with_errors" : "completed",
     updated_at: Date.now(), completed_at: Date.now(), total: results.length,
     result_chunks: resultChunks, summary, error: null,
   };
