@@ -32,16 +32,30 @@ export function selectActiveEvents(events: TbaEvent[], now: number): TbaEvent[] 
     .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.key.localeCompare(b.key));
 }
 
+/** Events in the published this-week window enter full competition hydration
+ * before their local start date; completed and expired events leave normal polling. */
+export function selectThisWeekEvents(events: TbaEvent[], now: number): TbaEvent[] {
+  return events
+    .filter((event) => event && typeof event.key === "string" && isValidEventLifecycleInput(event))
+    .filter((event) => {
+      const lifecycle = lifecycleFor(event, now).lifecycle;
+      return lifecycle === "upcoming" || lifecycle === "active";
+    })
+    .sort((a, b) => a.start_date.localeCompare(b.start_date) || a.key.localeCompare(b.key));
+}
+
 export function selectPollingCandidates(
   events: TbaEvent[],
   registeredEventKeys: ReadonlySet<string>,
   now: number,
   limit = MAX_EVENT_CANDIDATES_PER_RUN,
   rotationSlot = 0,
-): Array<{ event: TbaEvent; lifecycle: "active" }> {
-  const active = selectActiveEvents(events, now).filter((event) => registeredEventKeys.has(event.key));
-  const selectedKeys = new Set(selectBudgetedKeys(active.map((item) => item.key), limit, rotationSlot));
-  return active.filter((item) => selectedKeys.has(item.key)).map((event) => ({ event, lifecycle: "active" as const }));
+): Array<{ event: TbaEvent; lifecycle: "active" | "upcoming" }> {
+  const competitionEvents = selectThisWeekEvents(events, now).filter((event) => registeredEventKeys.has(event.key));
+  const selectedKeys = new Set(selectBudgetedKeys(competitionEvents.map((item) => item.key), limit, rotationSlot));
+  return competitionEvents.filter((item) => selectedKeys.has(item.key)).map((event) => ({
+    event, lifecycle: lifecycleFor(event, now).lifecycle as "active" | "upcoming",
+  }));
 }
 
 
