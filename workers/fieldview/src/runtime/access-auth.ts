@@ -76,8 +76,8 @@ function normalizeTeamDomain(value: string | undefined): string | null {
 }
 
 function configuredAdminEmails(value: string | undefined): Set<string> {
-  return new Set((value ?? "").split(/[\s,;]+/).map((email) => email.trim().toLowerCase())
-    .filter((email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)));
+  return new Set((value ?? "").split(/[\\s,;]+/).map((email) => email.trim().toLowerCase())
+    .filter((email) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)));
 }
 
 async function loadJwks(
@@ -111,7 +111,7 @@ async function loadJwks(
   }
 
   const cacheControl = response.headers.get("Cache-Control") ?? "";
-  const maxAge = /(?:^|,)\s*max-age=(\d+)/i.exec(cacheControl);
+  const maxAge = /(?:^|,)\\s*max-age=(\\d+)/i.exec(cacheControl);
   const ttl = maxAge
     ? Math.min(MAX_JWKS_TTL_MS, Math.max(30_000, Number(maxAge[1]) * 1000))
     : DEFAULT_JWKS_TTL_MS;
@@ -231,7 +231,9 @@ export async function isCloudflareAccessAdmin(
     }
     if (!allowlist.has(email)) return reject("identity_not_allowlisted");
 
-    await verifySignature(parts, issuer, env.fetcher ?? fetch);
+    if (!await verifySignature(parts, issuer, env.fetcher ?? fetch)) {
+      return reject("signature_invalid");
+    }
     return true;
   } catch (error) {
     return reject(error instanceof AccessVerificationError
