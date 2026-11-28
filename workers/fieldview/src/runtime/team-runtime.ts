@@ -233,11 +233,12 @@ export class TeamRuntime extends DurableObjectBase {
       if (!validateRuntimeBootstrapBundle(body, { kind: "team", key: this.teamKey, year })) {
         return Response.json({ error: "Invalid team bootstrap bundle" }, { status: 400 });
       }
-      const allowed = new Set(this.endpoints(year).map((resource) => resource.endpoint));
       const required = new Set([TBA_ENDPOINTS.team(this.teamKey), TBA_ENDPOINTS.teamEvents(this.teamKey, year)]);
-      if (body.resources.some((resource) => !allowed.has(resource.endpoint)) ||
+      const optional = new Set([FRC_COLORS_ENDPOINTS.team(Number(this.teamKey.replace(/^frc/i, "")))]);
+      const allowedBaseline = new Set([...required, ...optional]);
+      if (body.resources.some((resource) => !allowedBaseline.has(resource.endpoint)) ||
           [...required].some((endpoint) => !body.resources.some((resource) => resource.endpoint === endpoint))) {
-        return Response.json({ error: "Bootstrap must contain the team and season-event baseline resources" }, { status: 400 });
+        return Response.json({ error: "Team bootstrap must contain only team, season-event, and optional FRC-Colors baseline resources" }, { status: 400 });
       }
       const receipt = await this.storage.transaction(async (tx) => {
         const receiptKey = "bootstrap:accepted:" + year;
