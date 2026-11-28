@@ -61,6 +61,9 @@ export async function acquireRuntimeBootstrap(
       if (response.status === 404) {
         states.push({ ...state, status: "unavailable", lastAttemptAt: now });
       } else if (!response.ok) {
+        console.warn("[runtime-bootstrap] provider request failed", JSON.stringify({
+          kind, key, provider: resource.provider, endpoint: resource.endpoint, status: response.status,
+        }));
         states.push({ ...state, status: "failed", lastAttemptAt: now });
       } else {
         const data: unknown = await response.json();
@@ -72,7 +75,11 @@ export async function acquireRuntimeBootstrap(
           revision: 1, validatorRevision: 1, lastAttemptAt: now,
         });
       }
-    } catch {
+    } catch (error) {
+      console.warn("[runtime-bootstrap] provider request threw", JSON.stringify({
+        kind, key, provider: resource.provider, endpoint: resource.endpoint,
+        error: error instanceof Error ? error.message : String(error),
+      }));
       states.push({ ...state, status: "failed", lastAttemptAt: now });
     }
   }
