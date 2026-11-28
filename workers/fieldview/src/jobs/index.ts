@@ -36,10 +36,11 @@ interface JobsEnvironment extends RuntimeEnvironment, SeasonEnvironment {
 
 interface WorkflowParameters {
   scheduledAt?: number;
-  operation?: "discover-season";
+  operation?: "discover-season" | "register-event-batch" | "discover-team-directory" | "register-team-batch";
   year?: number;
   requestedAt?: number;
   jobId?: string;
+  cursor?: number;
 }
 
 interface AdminDiscoveryJobRecord {
