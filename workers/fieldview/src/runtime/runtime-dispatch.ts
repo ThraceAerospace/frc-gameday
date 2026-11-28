@@ -91,10 +91,13 @@ export async function dispatchRuntime(
   const path = paths[action];
   if (!path) return Response.json({ error: "Unsupported event runtime dispatch" }, { status: 400 });
   const method = action === "state" || action === "analytics" || action === "analytics-state" ? "GET" : "POST";
-  // Bootstrap bundles carry their own identity contract. In particular,
-  // kind/key/year are validated by the Durable Object against its bound identity
-  // and requested season, so dispatch must forward the bundle unchanged.
+  // Bootstrap bundles carry their own identity contract. Preserve kind/key/year
+  // for validation by the Durable Object; other commands retain the compact body
+  // contract and do not receive dispatch metadata.
   const payload = { ...body };
+  if (action !== "bootstrap") {
+    delete payload.kind; delete payload.key; delete payload.action; delete payload.year;
+  }
 
   const response = await stub.fetch(new Request("https://event-runtime/" + path, {
     method, headers,
