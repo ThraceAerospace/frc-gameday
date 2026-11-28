@@ -6,7 +6,7 @@ import { createEndpointState, type EndpointState } from "../runtime/endpoint-sta
 import type { RuntimeEnvironment } from "../runtime/cloudflare.ts";
 import type { RuntimeBootstrapBundle, RuntimeBootstrapKind } from "../runtime/bootstrap.ts";
 
-type Provider = "tba" | "statbotics" | "frc-colors";
+type Provider = "tba" | "frc-colors";
 type Resource = { provider: Provider; endpoint: string };
 
 function eventResources(eventKey: string): Resource[] {
