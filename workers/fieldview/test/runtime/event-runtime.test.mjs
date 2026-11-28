@@ -1175,3 +1175,42 @@ test("EventRuntime discovery registration rejects unauthorized and mismatched id
   assert.equal(storage.values.get("event-key"), "2027rikin",
     "a mismatched registration cannot rebind an existing EventRuntime");
 });
+
+
+test("EventRuntime baseline readiness is independent from deferred competition hydration", async () => {
+  const storage = new MemoryStorage();
+  const eventKey = "2027baseline";
+  const now = Date.now();
+  for (const endpoint of [TBA_ENDPOINTS.event(eventKey), TBA_ENDPOINTS.eventTeams(eventKey)]) {
+    storage.values.set("endpoint:" + endpoint, {
+      endpoint, status: "available", data: [], providerData: [], etag: null,
+      lastFetchedAt: now, expiresAt: null, revision: 1, validatorRevision: 1,
+      lastAttemptAt: now, lastWebhookAt: null,
+    });
+  }
+  const runtime = new EventRuntime({ storage }, {
+    TBA_API_KEY: "test-api-key", RUNTIME_ADMIN_TOKEN: "runtime-token",
+    fetcher: async () => { throw new Error("readiness must not acquire provider data"); },
+  }, eventKey);
+  const request = (body) => new Request("https://event-runtime/readiness", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer runtime-token",
+      "X-FieldView-Event-Key": eventKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const baseline = await runtime.fetch(request({}));
+  assert.equal(baseline.status, 200);
+  const baselineBody = await baseline.json();
+  assert.equal(baselineBody.state_valid, true);
+  assert.equal(baselineBody.hydration_scope, "baseline");
+  assert.equal(baselineBody.refresh_required, false);
+  const full = await runtime.fetch(request({ require_full_hydration: true }));
+  assert.equal(full.status, 200);
+  const fullBody = await full.json();
+  assert.equal(fullBody.state_valid, false);
+  assert.equal(fullBody.hydration_scope, "full");
+  assert.ok(fullBody.stale_sources.length > 0);
+});
