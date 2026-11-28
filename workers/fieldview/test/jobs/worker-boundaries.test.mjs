@@ -48,18 +48,18 @@ test("season readiness registers missing event and team Durable Objects before i
   const readiness = await readFile(path.join(sourceRoot, "jobs", "season-readiness.ts"), "utf8");
   const eventRuntime = await readFile(path.join(sourceRoot, "runtime", "event-runtime.ts"), "utf8");
   const teamRuntime = await readFile(path.join(sourceRoot, "runtime", "team-runtime.ts"), "utf8");
-  assert.match(readiness, /async function ensureRegistered\\(/);
+  assert.match(readiness, /async function ensureRegistered\(/);
   assert.ok(readiness.includes("registry/runtime-events/"));
   assert.ok(readiness.includes("registry/runtime-teams/"));
-  assert.match(readiness, /namespace\\.get\\(namespace\\.idFromName\\(key\\)\\)/);
-  assert.match(readiness, /"-runtime\\/register"/);
-  assert.match(eventRuntime, /url\\.pathname === "\\/register"/);
-  assert.match(teamRuntime, /url\\.pathname === "\\/register"/);
+  assert.match(readiness, /namespace\.get\(namespace\.idFromName\(key\)\)/);
+  assert.match(readiness, /"-runtime\/register"/);
+  assert.match(eventRuntime, /url\.pathname === "\/register"/);
+  assert.match(teamRuntime, /url\.pathname === "\/register"/);
   const runner = readiness.slice(readiness.indexOf("async function runSeasonReadiness"), readiness.indexOf("export class EventSeasonReadinessWorkflow"));
   const registration = runner.indexOf("await ensureRegistered(env, kind, keys, year, step)");
   const inspection = runner.indexOf('dispatchRuntime(env, kind, key, "readiness"');
   assert.ok(registration >= 0 && inspection > registration,
     "all identities must be registered before readiness inspection begins");
   const registrationHelper = readiness.slice(readiness.indexOf("async function ensureRegistered"), readiness.indexOf("async function runSeasonReadiness"));
-  assert.doesNotMatch(registrationHelper, /setAlarm|deleteAlarm|refresh\\(/);
+  assert.doesNotMatch(registrationHelper, /setAlarm|deleteAlarm|refresh\(/);
 });
