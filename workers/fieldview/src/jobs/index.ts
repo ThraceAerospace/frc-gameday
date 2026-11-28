@@ -208,7 +208,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
     }
     const season = year!;
     const store = createDiscoveryServiceClient(this.env);
-    const jobKey = \`admin/discovery-jobs/\${season}.json\`;
+    const jobKey = `admin/discovery-jobs/${season}.json`;
     const job = await readJson<AdminDiscoveryJobRecord>(store, jobKey);
     const requestedAt = payload.requestedAt ?? job?.started_at ?? Date.now();
     const child = async (id: string, operation: WorkflowParameters["operation"], cursor = 0) => {
@@ -280,8 +280,8 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
       if (payload.operation === "register-event-batch" || payload.operation === "register-team-batch") {
         const kind = payload.operation === "register-event-batch" ? "event" : "team";
         const keys = kind === "event"
-          ? (await readJson<DiscoveryDocument>(store, \`discovery/events/\${season}.json\`))?.events.map(item => item.key) ?? []
-          : await readJson<string[]>(store, \`registry/teams/\${season}.json\`) ?? [];
+          ? (await readJson<DiscoveryDocument>(store, `discovery/events/${season}.json`))?.events.map(item => item.key) ?? []
+          : await readJson<string[]>(store, `registry/teams/${season}.json`) ?? [];
         const valid = [...new Set(keys)].filter(key => kind === "event" ? /^[a-zA-Z0-9_-]+$/.test(key) : /^frc[0-9]+$/.test(key));
         const cursor = Math.max(0, Math.floor(payload.cursor ?? 0));
         const batchSize = 10;
@@ -336,8 +336,8 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         }
         const expectedPages = Number(canonical.maxTeamPage) + 1;
         const existingManifest = await readJson<{ complete?: boolean; teamCount?: number; pageCount?: number; generation?: number }>(
-          store, \`discovery/teams/\${season}.json\`);
-        const existingKeys = await readJson<string[]>(store, \`registry/teams/\${season}.json\`);
+          store, `discovery/teams/${season}.json`);
+        const existingKeys = await readJson<string[]>(store, `registry/teams/${season}.json`);
         let generation: number;
         let teamKeys: string[];
         let failedPages: number[];
