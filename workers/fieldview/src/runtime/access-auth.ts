@@ -94,7 +94,8 @@ async function loadJwks(
     response = await fetcher(issuer + "/cdn-cgi/access/certs", {
       method: "GET",
       headers: { Accept: "application/json" },
-      redirect: "error",
+      // Workers does not support redirect: "error"; manual mode lets us reject redirects safely.
+      redirect: "manual",
     });
   } catch (error) {
     // Keep diagnostics limited to runtime error classification. Never log the
