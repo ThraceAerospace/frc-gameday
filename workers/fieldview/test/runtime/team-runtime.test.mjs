@@ -987,14 +987,14 @@ test("TeamRuntime baseline readiness treats FRC-Colors as optional while full hy
   const storage = new MemoryStorage();
   const teamKey = "frc3461", year = 2026, now = Date.now();
   storage.values.set("team-key", teamKey);
-  for (const endpoint of [TBA_ENDPOINTS.team(teamKey), TBA_ENDPOINTS.teamEvents(teamKey, year)]) {
+  const colorsEndpoint = FRC_COLORS_ENDPOINTS.team(3461);
+  for (const { endpoint } of teamResourceEndpoints(teamKey, year).filter((resource) => resource.endpoint !== colorsEndpoint)) {
     storage.values.set("endpoint:" + endpoint, {
       endpoint, status: "available", data: [], providerData: [], etag: null,
       lastFetchedAt: now, expiresAt: null, revision: 1, validatorRevision: 1,
       lastAttemptAt: now, lastWebhookAt: null,
     });
   }
-  const colorsEndpoint = FRC_COLORS_ENDPOINTS.team(3461);
   storage.values.set("endpoint:" + colorsEndpoint, {
     endpoint: colorsEndpoint, status: "failed", data: null, providerData: null, etag: null,
     lastFetchedAt: null, expiresAt: null, revision: 0, validatorRevision: 0,
@@ -1021,7 +1021,9 @@ test("TeamRuntime baseline readiness treats FRC-Colors as optional while full hy
   const full = await runtime.fetch(request({ require_full_hydration: true }));
   assert.equal(full.status, 200);
   const fullBody = await full.json();
-  assert.equal(fullBody.state_valid, false);
+  assert.equal(fullBody.state_valid, true,
+    "all required full-hydration resources can be ready while optional FRC-Colors has failed");
   assert.equal(fullBody.hydration_scope, "full");
-  assert.ok(fullBody.stale_resources.includes(colorsEndpoint));
+  assert.equal(fullBody.refresh_required, false);
+  assert.equal(fullBody.stale_resources.includes(colorsEndpoint), false);
 });
