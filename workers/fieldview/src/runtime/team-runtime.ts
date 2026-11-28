@@ -234,8 +234,10 @@ export class TeamRuntime extends DurableObjectBase {
         return Response.json({ error: "Invalid team bootstrap bundle" }, { status: 400 });
       }
       const allowed = new Set(this.endpoints(year).map((resource) => resource.endpoint));
-      if (body.resources.length !== allowed.size || body.resources.some((resource) => !allowed.has(resource.endpoint))) {
-        return Response.json({ error: "Bootstrap contains an unrecognized team resource" }, { status: 400 });
+      const required = new Set([TBA_ENDPOINTS.team(this.teamKey), TBA_ENDPOINTS.teamEvents(this.teamKey, year)]);
+      if (body.resources.some((resource) => !allowed.has(resource.endpoint)) ||
+          [...required].some((endpoint) => !body.resources.some((resource) => resource.endpoint === endpoint))) {
+        return Response.json({ error: "Bootstrap must contain the team and season-event baseline resources" }, { status: 400 });
       }
       const receipt = await this.storage.transaction(async (tx) => {
         const receiptKey = "bootstrap:accepted:" + year;
@@ -739,11 +741,21 @@ export class TeamRuntime extends DurableObjectBase {
       }, { headers: { "Cache-Control": "no-store" } });
     }
     if (request.method === "POST" && url.pathname === "/readiness") {
+      const body: unknown = await request.json().catch(() => null);
+      const requireFullHydration = Boolean(body && typeof body === "object" && !Array.isArray(body) &&
+        (body as Record<string, unknown>).require_full_hydration === true);
       const resources = this.endpoints(year);
+      const baselineEndpoints = new Set([
+        TBA_ENDPOINTS.team(this.teamKey),
+        TBA_ENDPOINTS.teamEvents(this.teamKey, year),
+      ]);
+      const expectedResources = requireFullHydration
+        ? resources
+        : resources.filter((resource) => baselineEndpoints.has(resource.endpoint));
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      // A materialized TeamState is optional; readiness is based on its source
-      // endpoint records, not on a previously persisted projection.
-      const validState = resources.every(({ endpoint }) => {
+      // FRC-Colors is deliberately optional in the baseline tier. It is retained
+      // when available, but its absence or failure never blocks TeamRuntime readiness.
+      const validState = expectedResources.every(({ endpoint }) => {
         const source = states.get(endpointKey(endpoint));
         return Boolean(source && (
           source.lastFetchedAt !== null || source.lastWebhookAt !== null ||
@@ -751,7 +763,7 @@ export class TeamRuntime extends DurableObjectBase {
         ));
       });
       const now = Date.now();
-      const staleResources = resources.filter((resource) => {
+      const staleResources = expectedResources.filter((resource) => {
         const source = states.get(endpointKey(resource.endpoint));
         return !source || source.status === "failed" || source.status === "stale" ||
           (source.lastFetchedAt === null && source.status !== "unavailable") ||
@@ -762,6 +774,7 @@ export class TeamRuntime extends DurableObjectBase {
         team_key: this.teamKey,
         year,
         state_valid: validState,
+        hydration_scope: requireFullHydration ? "full" : "baseline",
         stale_resources: staleResources,
         refresh_required: refreshRequired,
         refresh_dispatched: false,
@@ -769,6 +782,7 @@ export class TeamRuntime extends DurableObjectBase {
         results: [],
       }, { headers: { "Cache-Control": "no-store" } });
     }
+
     if (request.method === "POST" && url.pathname === "/ingest-resource") {
       const body: unknown = await request.json().catch(() => null);
       const endpoint = body && typeof body === "object" && !Array.isArray(body)
