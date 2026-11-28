@@ -226,7 +226,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
         events: 0, teams: 0, team_pages: 0, expected_team_pages: 0, failed_team_pages: [],
         warnings: [], team_directory_complete: false, steps: 0, error: null,
-        started_at: requestedAt, updated_at: Date.now(),
+        started_at: requestedAt,
         ...(current ?? {}), ...patch, workflow_id: jobId, year: season, updated_at: Date.now(),
       };
       await store.put(jobKey, JSON.stringify(next));
