@@ -57,6 +57,7 @@ interface AdminDiscoveryJobRecord {
   warnings?: string[];
   team_directory_complete?: boolean;
   team_generation?: number;
+  event_baseline_seed_workflow_id?: string;
   steps: number;
   error: string | null;
   started_at: number;
