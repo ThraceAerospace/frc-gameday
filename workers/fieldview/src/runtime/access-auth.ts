@@ -96,8 +96,20 @@ async function loadJwks(
       headers: { Accept: "application/json" },
       redirect: "error",
     });
-  } catch {
-    throw new AccessVerificationError("jwks_fetch_failed");
+  } catch (error) {
+    // Keep diagnostics limited to runtime error classification. Never log the
+    // request URL, JWT, response body, or arbitrary exception messages.
+    const cause = error instanceof Error && "cause" in error ? error.cause : undefined;
+    const causeCode = cause && typeof cause === "object" && "code" in cause &&
+      typeof cause.code === "string" && /^[A-Z0-9_]+$/.test(cause.code)
+      ? cause.code
+      : undefined;
+    const errorName = error instanceof Error && /^[A-Za-z]+$/.test(error.name)
+      ? error.name
+      : "UnknownError";
+    throw new AccessVerificationError(
+      causeCode ? "jwks_fetch_failed_" + causeCode : "jwks_fetch_failed_" + errorName,
+    );
   }
   if (!response.ok) throw new AccessVerificationError("jwks_http_" + response.status);
   let body: AccessJwkSet;
