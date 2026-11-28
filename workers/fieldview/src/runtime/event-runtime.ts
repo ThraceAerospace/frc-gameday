@@ -395,8 +395,10 @@ export class EventRuntime extends DurableObjectBase {
         return Response.json({ error: "Invalid event bootstrap bundle" }, { status: 400 });
       }
       const allowed = new Set([...this.allowedEndpoints, STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)]);
-      if (body.resources.length !== allowed.size || body.resources.some((resource) => !allowed.has(resource.endpoint))) {
-        return Response.json({ error: "Bootstrap contains an unrecognized event resource" }, { status: 400 });
+      const required = new Set([TBA_ENDPOINTS.event(this.eventKey), TBA_ENDPOINTS.eventTeams(this.eventKey)]);
+      if (body.resources.some((resource) => !allowed.has(resource.endpoint)) ||
+          [...required].some((endpoint) => !body.resources.some((resource) => resource.endpoint === endpoint))) {
+        return Response.json({ error: "Bootstrap must contain the event and participant baseline resources only" }, { status: 400 });
       }
       const receipt = await this.storage.transaction(async (tx) => {
         const receiptKey = "bootstrap:accepted:" + year;
@@ -475,10 +477,13 @@ export class EventRuntime extends DurableObjectBase {
     }
 
     if (request.method === "POST" && url.pathname === "/readiness") {
+      const body: unknown = await request.json().catch(() => null);
+      const requireFullHydration = isRecord(body) && body.require_full_hydration === true;
       const sources = await this.storage.list<EndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      const expectedEndpoints = [...this.allowedEndpoints,
+      const fullEndpoints = [...this.allowedEndpoints,
         STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)];
-      // Readiness describes provider-resource availability, not a precomputed EventState projection.
+      const baselineEndpoints = [TBA_ENDPOINTS.event(this.eventKey), TBA_ENDPOINTS.eventTeams(this.eventKey)];
+      const expectedEndpoints = requireFullHydration ? fullEndpoints : baselineEndpoints;
       const validState = expectedEndpoints.every((endpoint) => {
         const source = sources.get(endpointStorageKey(endpoint));
         return Boolean(source && (
@@ -486,7 +491,6 @@ export class EventRuntime extends DurableObjectBase {
           source.status === "unavailable"
         ));
       });
-      const body: unknown = await request.json().catch(() => null);
       const requestedInterval = isRecord(body) ? body.minimumIntervalMs : undefined;
       const minimumIntervalMs = typeof requestedInterval === "number" &&
         Number.isSafeInteger(requestedInterval) && requestedInterval >= 1_000 &&
@@ -512,6 +516,7 @@ export class EventRuntime extends DurableObjectBase {
       return Response.json({
         event_key: this.eventKey,
         state_valid: validState,
+        hydration_scope: requireFullHydration ? "full" : "baseline",
         publication_status: stateStatus,
         stale_sources: staleSources,
         refresh_required: refreshRequired,
