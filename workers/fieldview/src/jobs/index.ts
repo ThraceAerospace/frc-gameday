@@ -211,11 +211,11 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
     const jobKey = \`admin/discovery-jobs/\${season}.json\`;
     const job = await readJson<AdminDiscoveryJobRecord>(store, jobKey);
     const requestedAt = payload.requestedAt ?? job?.started_at ?? Date.now();
-    const child = async (id: string, operation: WorkflowParameters["operation"]) => {
+    const child = async (id: string, operation: WorkflowParameters["operation"], cursor = 0) => {
       await step.do("schedule-" + id, async () => {
         await this.env.SEASON_DISCOVERY.create({
           id,
-          params: { operation, year: season, requestedAt, jobId },
+          params: { operation, year: season, requestedAt, jobId, cursor },
         });
         return { id, operation };
       });
@@ -304,7 +304,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         const next = cursor + batch.length;
         if (next < valid.length) {
           const nextId = jobId + "-" + kind + "-registration-" + String(next).padStart(4, "0");
-          await child(nextId, payload.operation);
+          await child(nextId, payload.operation, next);
           await update("record-" + kind + "-registration-progress-" + cursor, {
             stage: kind === "event" ? "registering_events" : "registering_teams",
             ...(kind === "event" ? { events: valid.length } : { teams: valid.length }),
