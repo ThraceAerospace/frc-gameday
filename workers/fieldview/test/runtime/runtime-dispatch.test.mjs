@@ -107,6 +107,41 @@ test("readiness dispatch sends inspection-only requests to both runtime types", 
 });
 
 
+test("event bootstrap dispatch preserves the complete validated bundle identity", async () => {
+  const markers = new Map();
+  const bundle = {
+    version: 1, bootstrap_id: "season:readiness:event:2027:2027rikin",
+    kind: "event", key: "2027rikin", year: 2027, acquired_at: Date.now(),
+    resources: [{
+      endpoint: "/event/2027rikin", status: "available", data: { key: "2027rikin" },
+      providerData: { key: "2027rikin" }, etag: null, lastFetchedAt: Date.now(),
+      expiresAt: null, revision: 1, validatorRevision: 1,
+      lastAttemptAt: Date.now(), lastWebhookAt: null,
+    }],
+  };
+  let captured;
+  const env = {
+    RUNTIME_ADMIN_TOKEN: "test-token",
+    EVENT_RUNTIME: namespace(async (request, id) => {
+      captured = { id, path: new URL(request.url).pathname, year: new URL(request.url).searchParams.get("year"), body: await request.json() };
+      return Response.json({ accepted: true, resource_status: "complete" });
+    }),
+    DISCOVERY_STORAGE: {
+      async get(key) { return markers.get(key); },
+      async put(key, value) { markers.set(key, value); },
+      async list() { return new Map(); },
+      async delete(key) { return markers.delete(key); },
+    },
+  };
+
+  const response = await dispatchRuntime(env, "event", "2027rikin", "bootstrap", bundle, 2027);
+  assert.equal(response.status, 200);
+  assert.deepEqual(captured, {
+    id: "2027rikin", path: "/bootstrap", year: "2027", body: bundle,
+  });
+  assert.equal(markers.has("registry/runtime-events/2027rikin.json"), true);
+});
+
 test("team runtime dispatch does not directly orchestrate EventRuntime analytics", async () => {
   const eventCalls = [];
   const workflowCalls = [];
