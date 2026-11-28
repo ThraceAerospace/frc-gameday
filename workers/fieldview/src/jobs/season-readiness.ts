@@ -53,7 +53,7 @@ async function ensureRegistered(
   const existing = await step.do(kind + "-read-runtime-registration-markers", () => registeredKeys(env, kind));
   const missing = [...new Set(keys)].filter((key) => !existing.has(key));
   for (let offset = 0; offset < missing.length; offset += 10) {
-    const chunk = missing.slice(offset, offset + 25);
+    const chunk = missing.slice(offset, offset + 10);
     await step.do(kind + "-register-runtime-chunk-" + offset, async () => {
       for (const key of chunk) {
         const stub = namespace.get(namespace.idFromName(key));
@@ -123,9 +123,9 @@ async function runSeasonReadiness(
     key: string; state_valid: boolean;
     bootstrapped: boolean; already_initialized?: boolean; resource_status?: string; error?: string;
   }> = [];
-  // Each entity gets its own Workflow step. Bootstrap acquisition makes up to
-  // thirteen provider requests, followed by the runtime handoff; batching several
-  // entities inside one step can exceed the Workers per-invocation subrequest cap.
+  // Each entity gets its own Workflow step. Baseline bootstrap performs at
+  // most two TBA requests for events, or two TBA requests plus optional
+  // FRC-Colors for teams. Keep entities isolated so retries remain idempotent.
   // Persist each outcome immediately so a later failure never loses completed work.
   for (const key of registered) {
     const outcome = await step.do("bootstrap-" + kind + "-" + key, async () => {
@@ -153,8 +153,11 @@ async function runSeasonReadiness(
           const receipt = await response.json() as { resource_status?: string; accepted?: boolean };
           if (receipt.accepted !== true) throw new Error("Runtime did not confirm bootstrap acceptance");
           const resourceStatus = receipt.resource_status ?? "unknown";
+          const verified = await dispatchRuntime(env, kind, key, "readiness", {}, year);
+          if (!verified.ok) throw new Error("Post-bootstrap readiness returned HTTP " + verified.status);
+          const verifiedBody = await verified.json() as { state_valid?: unknown };
           result = {
-            key, state_valid: resourceStatus !== "failed",
+            key, state_valid: verifiedBody.state_valid === true,
             bootstrapped: true, already_initialized: false, resource_status: resourceStatus,
           };
         }
