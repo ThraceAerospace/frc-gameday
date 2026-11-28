@@ -1,7 +1,5 @@
 import { TBAApiClient } from "../../../../packages/providers/tba/src/client.ts";
 import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
-import { StatboticsApiClient } from "../../../../packages/providers/statbotics/src/client.ts";
-import { STATBOTICS_ENDPOINTS } from "../../../../packages/providers/statbotics/src/endpoints.ts";
 import { FRCColorsApiClient } from "../../../../packages/providers/frc-colors/src/client.ts";
 import { FRC_COLORS_ENDPOINTS } from "../../../../packages/providers/frc-colors/src/endpoints.ts";
 import { createEndpointState, type EndpointState } from "../runtime/endpoint-state.ts";
@@ -13,15 +11,8 @@ type Resource = { provider: Provider; endpoint: string };
 
 function eventResources(eventKey: string): Resource[] {
   return [
-    ...[
-      TBA_ENDPOINTS.event(eventKey), TBA_ENDPOINTS.eventTeams(eventKey),
-      TBA_ENDPOINTS.eventTeamStatuses(eventKey), TBA_ENDPOINTS.eventMatches(eventKey),
-      TBA_ENDPOINTS.eventAlliances(eventKey), TBA_ENDPOINTS.eventOPRs(eventKey),
-      TBA_ENDPOINTS.eventPredictions(eventKey), TBA_ENDPOINTS.eventRankings(eventKey),
-      TBA_ENDPOINTS.eventAwards(eventKey), TBA_ENDPOINTS.eventMedia(eventKey),
-      TBA_ENDPOINTS.eventDistrictPoints(eventKey), TBA_ENDPOINTS.eventAdvancementPoints(eventKey),
-    ].map((endpoint) => ({ provider: "tba" as const, endpoint })),
-    { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.matches({ event: eventKey }, 1000, 0) },
+    { provider: "tba", endpoint: TBA_ENDPOINTS.event(eventKey) },
+    { provider: "tba", endpoint: TBA_ENDPOINTS.eventTeams(eventKey) },
   ];
 }
 
@@ -29,11 +20,7 @@ function teamResources(teamKey: string, year: number): Resource[] {
   const teamNumber = Number(teamKey.replace(/^frc/i, ""));
   return [
     { provider: "tba", endpoint: TBA_ENDPOINTS.team(teamKey) },
-    { provider: "tba", endpoint: TBA_ENDPOINTS.teamDistricts(teamKey) },
     { provider: "tba", endpoint: TBA_ENDPOINTS.teamEvents(teamKey, year) },
-    { provider: "tba", endpoint: TBA_ENDPOINTS.teamMedia(teamKey, year) },
-    { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamYear(teamNumber, year) },
-    { provider: "statbotics", endpoint: STATBOTICS_ENDPOINTS.teamEvents({ team: teamNumber, year }) },
     { provider: "frc-colors", endpoint: FRC_COLORS_ENDPOINTS.team(teamNumber) },
   ];
 }
@@ -54,21 +41,21 @@ export async function acquireRuntimeBootstrap(
   bootstrapId: string,
 ): Promise<RuntimeBootstrapBundle> {
   const tba = new TBAApiClient({ apiKey: env.TBA_API_KEY, ...(env.fetcher ? { fetch: env.fetcher } : {}) });
-  const statbotics = new StatboticsApiClient({
-    ...(env.STATBOTICS_API_BASE_URL ? { baseUrl: env.STATBOTICS_API_BASE_URL } : {}),
-    ...(env.fetcher ? { fetch: env.fetcher } : {}),
-  });
-  const colors = new FRCColorsApiClient(env.fetcher ? { fetch: env.fetcher } : {});
+  const colors = kind === "team"
+    ? new FRCColorsApiClient(env.fetcher ? { fetch: env.fetcher } : {})
+    : null;
   const resources = kind === "event" ? eventResources(key) : teamResources(key, year);
 
   const states: EndpointState<unknown>[] = [];
-  // Keep each entity's provider requests sequential, matching the ongoing
-  // runtime refresh path. The season workflow bounds entity-level concurrency.
+  // Minimal baseline seed only: EventRuntime gets event + roster; TeamRuntime
+  // gets team + season events + optional FRC-Colors. Competition resources are
+  // acquired later by the active polling coordinator. Keep requests sequential.
   for (const resource of resources) {
     const state = createEndpointState<unknown>(resource.endpoint);
     const now = Date.now();
     try {
-      const client = resource.provider === "tba" ? tba : resource.provider === "statbotics" ? statbotics : colors;
+      const client = resource.provider === "tba" ? tba : colors;
+      if (!client) throw new Error("Provider is not available for this bootstrap tier");
       const response = await client.request(resource.endpoint);
       const expiresAt = cacheMaxAge(response.headers.get("Cache-Control"));
       if (response.status === 404) {
