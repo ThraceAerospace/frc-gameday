@@ -1027,3 +1027,45 @@ test("TeamRuntime baseline readiness treats FRC-Colors as optional while full hy
   assert.equal(fullBody.refresh_required, false);
   assert.equal(fullBody.stale_resources.includes(colorsEndpoint), false);
 });
+
+
+test("TeamRuntime accepts required team baseline and optional FRC-Colors only", async () => {
+  const storage = new MemoryStorage();
+  const teamKey = "frc3461", year = 2026, now = Date.now();
+  const resource = (endpoint, status = "available") => ({
+    endpoint, status, data: status === "available" ? {} : null,
+    providerData: status === "available" ? {} : null, etag: null,
+    lastFetchedAt: status === "available" ? now : null, expiresAt: null,
+    revision: status === "available" ? 1 : 0, validatorRevision: status === "available" ? 1 : 0,
+    lastAttemptAt: now, lastWebhookAt: null,
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("bootstrap handoff must not fetch providers");
+  }), teamKey);
+  const request = (resources, bootstrapId) => new Request("https://team-runtime/bootstrap?year=" + year, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      version: 1, bootstrap_id: bootstrapId, kind: "team", key: teamKey,
+      year, acquired_at: now, resources,
+    }),
+  });
+  const colorsEndpoint = FRC_COLORS_ENDPOINTS.team(3461);
+  const baseline = await runtime.fetch(request([
+    resource(TBA_ENDPOINTS.team(teamKey)),
+    resource(TBA_ENDPOINTS.teamEvents(teamKey, year)),
+    resource(colorsEndpoint, "failed"),
+  ], "test:team-baseline"));
+  assert.equal(baseline.status, 200);
+  assert.equal((await baseline.json()).accepted, true);
+  const extra = await runtime.fetch(request([
+    resource(TBA_ENDPOINTS.team(teamKey)),
+    resource(TBA_ENDPOINTS.teamEvents(teamKey, year)),
+    resource(TBA_ENDPOINTS.teamDistricts(teamKey)),
+  ], "test:team-extra"));
+  assert.equal(extra.status, 400, "deferred team resources cannot be included in baseline bootstrap");
+});
