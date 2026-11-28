@@ -22,23 +22,6 @@ const validYear = (year: unknown): year is number =>
 const validTeam = (key: unknown): key is string => typeof key === "string" && /^frc[0-9]+$/.test(key);
 const validEvent = (key: unknown): key is string => typeof key === "string" && /^[a-zA-Z0-9_-]+$/.test(key);
 
-async function mapWithConcurrency<T, R>(
-  items: readonly T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let nextIndex = 0;
-  const workerCount = Math.min(items.length, Math.max(1, Math.floor(concurrency)));
-  await Promise.all(Array.from({ length: workerCount }, async () => {
-    while (true) {
-      const index = nextIndex++;
-      if (index >= items.length) return;
-      results[index] = await worker(items[index]!, index);
-    }
-  }));
-  return results;
-}
 
 async function readJson<T>(env: SeasonEnvironment, key: string): Promise<T | null> {
   const object = await createDiscoveryServiceClient(env).get<T>(key);
@@ -69,7 +52,7 @@ async function ensureRegistered(
   const prefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
   const existing = await step.do(kind + "-read-runtime-registration-markers", () => registeredKeys(env, kind));
   const missing = [...new Set(keys)].filter((key) => !existing.has(key));
-  for (let offset = 0; offset < missing.length; offset += 25) {
+  for (let offset = 0; offset < missing.length; offset += 10) {
     const chunk = missing.slice(offset, offset + 25);
     await step.do(kind + "-register-runtime-chunk-" + offset, async () => {
       for (const key of chunk) {
@@ -140,20 +123,26 @@ async function runSeasonReadiness(
     key: string; state_valid: boolean;
     bootstrapped: boolean; already_initialized?: boolean; resource_status?: string; error?: string;
   }> = [];
-  for (let offset = 0; offset < registered.length; offset += 25) {
-    const chunk = registered.slice(offset, offset + 25);
-    const outcomes = await step.do("bootstrap-" + kind + "-chunk-" + offset, async () =>
-      mapWithConcurrency(chunk, 4, async (key) => {
-        try {
-          const readiness = await dispatchRuntime(env, kind, key, "readiness", {}, year);
-          if (!readiness.ok) throw new Error("Readiness inspection returned HTTP " + readiness.status);
-          const readinessResult = await readiness.json() as { state_valid?: boolean };
-          if (readinessResult.state_valid === true) {
-            return {
-              key, state_valid: true,
-              bootstrapped: false, already_initialized: true, resource_status: "existing",
-            };
-          }
+  // Each entity gets its own Workflow step. Bootstrap acquisition makes up to
+  // thirteen provider requests, followed by the runtime handoff; batching several
+  // entities inside one step can exceed the Workers per-invocation subrequest cap.
+  // Persist each outcome immediately so a later failure never loses completed work.
+  for (const key of registered) {
+    const outcome = await step.do("bootstrap-" + kind + "-" + key, async () => {
+      let result: {
+        key: string; state_valid: boolean;
+        bootstrapped: boolean; already_initialized?: boolean; resource_status?: string; error?: string;
+      };
+      try {
+        const readiness = await dispatchRuntime(env, kind, key, "readiness", {}, year);
+        if (!readiness.ok) throw new Error("Readiness inspection returned HTTP " + readiness.status);
+        const readinessResult = await readiness.json() as { state_valid?: boolean };
+        if (readinessResult.state_valid === true) {
+          result = {
+            key, state_valid: true,
+            bootstrapped: false, already_initialized: true, resource_status: "existing",
+          };
+        } else {
           const bootstrapId = "season:" + workflowId + ":" + kind + ":" + year + ":" + key;
           const bundle = await acquireRuntimeBootstrap(env, kind, key, year, bootstrapId);
           const response = await dispatchRuntime(env, kind, key, "bootstrap", bundle as unknown as Record<string, unknown>, year);
@@ -164,18 +153,21 @@ async function runSeasonReadiness(
           const receipt = await response.json() as { resource_status?: string; accepted?: boolean };
           if (receipt.accepted !== true) throw new Error("Runtime did not confirm bootstrap acceptance");
           const resourceStatus = receipt.resource_status ?? "unknown";
-          return {
+          result = {
             key, state_valid: resourceStatus !== "failed",
             bootstrapped: true, already_initialized: false, resource_status: resourceStatus,
           };
-        } catch (error) {
-          return {
-            key, state_valid: false, bootstrapped: false, already_initialized: false,
-            error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
-          };
         }
-      }));
-    results.push(...outcomes);
+      } catch (error) {
+        result = {
+          key, state_valid: false, bootstrapped: false, already_initialized: false,
+          error: (error instanceof Error ? error.message : String(error)).slice(0, 300),
+        };
+      }
+      await store.put(prefix + "/progress/" + key + ".json", JSON.stringify(result));
+      return result;
+    });
+    results.push(outcome);
   }
 
   const summary = {
