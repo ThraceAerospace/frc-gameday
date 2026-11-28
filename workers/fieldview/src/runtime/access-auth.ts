@@ -36,6 +36,13 @@ interface CachedJwks {
   expiresAt: number;
 }
 
+class AccessVerificationError extends Error {
+  constructor(readonly reason: string) {
+    super(reason);
+    this.name = "AccessVerificationError";
+  }
+}
+
 const jwksCache = new Map<string, CachedJwks>();
 const MAX_TOKEN_LENGTH = 16_384;
 const DEFAULT_JWKS_TTL_MS = 5 * 60_000;
@@ -79,15 +86,25 @@ async function loadJwks(
   const cached = jwksCache.get(issuer);
   if (!forceRefresh && cached && cached.expiresAt > now) return cached.keys;
 
-  const response = await fetcher(issuer + "/cdn-cgi/access/certs", {
-    method: "GET",
-    headers: { Accept: "application/json" },
-    redirect: "error",
-  });
-  if (!response.ok) throw new Error("Cloudflare Access JWKS request failed");
-  const body = await response.json() as AccessJwkSet;
+  let response: Response;
+  try {
+    response = await fetcher(issuer + "/cdn-cgi/access/certs", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      redirect: "error",
+    });
+  } catch {
+    throw new AccessVerificationError("jwks_fetch_failed");
+  }
+  if (!response.ok) throw new AccessVerificationError("jwks_http_" + response.status);
+  let body: AccessJwkSet;
+  try {
+    body = await response.json() as AccessJwkSet;
+  } catch {
+    throw new AccessVerificationError("jwks_invalid_json");
+  }
   if (!Array.isArray(body.keys) || body.keys.length === 0) {
-    throw new Error("Cloudflare Access JWKS response contained no keys");
+    throw new AccessVerificationError("jwks_missing_keys");
   }
 
   const cacheControl = response.headers.get("Cache-Control") ?? "";
@@ -119,16 +136,28 @@ async function verifySignature(
     const jwk = keys.find((key) => key.kid === header.kid &&
       (!key.alg || key.alg === "RS256") && (!key.use || key.use === "sig"));
     if (!jwk) continue;
-    const key = await crypto.subtle.importKey(
-      "jwk",
-      jwk,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false,
-      ["verify"],
-    );
-    return crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, key, signature, signingInput);
+    let key: CryptoKey;
+    try {
+      key = await crypto.subtle.importKey(
+        "jwk",
+        jwk,
+        { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+        false,
+        ["verify"],
+      );
+    } catch {
+      throw new AccessVerificationError("signing_key_import_failed");
+    }
+    let valid: boolean;
+    try {
+      valid = await crypto.subtle.verify({ name: "RSASSA-PKCS1-v1_5" }, key, signature, signingInput);
+    } catch {
+      throw new AccessVerificationError("signature_verification_error");
+    }
+    if (!valid) throw new AccessVerificationError("signature_invalid");
+    return true;
   }
-  return false;
+  throw new AccessVerificationError("signing_key_not_found");
 }
 
 /**
@@ -199,11 +228,11 @@ export async function isCloudflareAccessAdmin(
     }
     if (!allowlist.has(email)) return reject("identity_not_allowlisted");
 
-    if (!await verifySignature(parts, issuer, env.fetcher ?? fetch)) {
-      return reject("signature_invalid_or_signing_key_unmatched");
-    }
+    await verifySignature(parts, issuer, env.fetcher ?? fetch);
     return true;
-  } catch {
-    return reject("jwks_fetch_or_signature_verification_error");
+  } catch (error) {
+    return reject(error instanceof AccessVerificationError
+      ? error.reason
+      : "jwks_or_signature_unexpected_error");
   }
 }
