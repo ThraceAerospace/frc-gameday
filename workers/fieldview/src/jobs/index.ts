@@ -245,13 +245,16 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         await update("record-event-discovery-started", { stage: "discovering_events" });
         const generation = await step.do("allocate-season-directory-generation", async () => Date.now());
         const eventChunkSize = 25;
-        const directory = await step.do("discover-season-events", {
-          retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-        }, async () => {
-          const response = await store.catalog("discover-event-directory", { year: season, generation, chunkSize: eventChunkSize });
-          if (!response.ok) throw new Error("Event directory acquisition returned HTTP " + response.status);
-          return response.json() as Promise<{ count: number; generation: number; chunkCount: number; needsChunking: boolean }>;
-        });
+        const priorEvents = await readJson<DiscoveryDocument>(store, `discovery/events/${season}.json`);
+        const directory = priorEvents?.year === season && Array.isArray(priorEvents.events)
+          ? { count: priorEvents.events.length, generation, chunkCount: 0, needsChunking: false }
+          : await step.do("discover-season-events", {
+            retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+          }, async () => {
+            const response = await store.catalog("discover-event-directory", { year: season, generation, chunkSize: eventChunkSize });
+            if (!response.ok) throw new Error("Event directory acquisition returned HTTP " + response.status);
+            return response.json() as Promise<{ count: number; generation: number; chunkCount: number; needsChunking: boolean }>;
+          });
         if (directory.needsChunking) {
           for (let first = 0; first < directory.chunkCount; first += 10) {
             const last = Math.min(directory.chunkCount, first + 10);
@@ -359,15 +362,19 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           const failed = new Set(failedPages);
           for (let page = 0; page < expectedPages; page++) {
             if (!failed.has(page)) continue;
-            const result = await step.do("discover-team-page-" + page, {
-              retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-            }, async () => {
-              const response = await store.catalog("discover-team-page", { year: season, generation, page });
-              if (!response.ok) throw new Error("Team page " + page + " returned HTTP " + response.status);
-              return response.json() as Promise<{ teamKeys: string[] }>;
-            });
-            teamKeys.push(...result.teamKeys);
-            failed.delete(page);
+            try {
+              const result = await step.do("discover-team-page-" + page, {
+                retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+              }, async () => {
+                const response = await store.catalog("discover-team-page", { year: season, generation, page });
+                if (!response.ok) throw new Error("Team page " + page + " returned HTTP " + response.status);
+                return response.json() as Promise<{ teamKeys: string[] }>;
+              });
+              teamKeys.push(...result.teamKeys);
+              failed.delete(page);
+            } catch (error) {
+              warnings.push(`Team page ${page} failed: ${error instanceof Error ? error.message : String(error)}`.slice(0, 500));
+            }
           }
           failedPages = [...failed].sort((a, b) => a - b);
           teamKeys = [...new Set(teamKeys)].sort();
