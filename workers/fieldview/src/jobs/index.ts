@@ -101,60 +101,6 @@ async function listRuntimeRegistry(bucket: DiscoveryServiceClient, kind: "event"
 }
 
 
-/**
- * Discovery owns first-time Durable Object registration. Existing markers are
- * read once; only missing identities receive a DO initialization request and a
- * corresponding discovery marker. Registration binds identity only—it never
- * acquires provider data or schedules background work.
- */
-async function registerDiscoveredRuntimes(
-  env: JobsEnvironment,
-  bucket: DiscoveryServiceClient,
-  step: WorkflowStep,
-  kind: "event" | "team",
-  keys: string[],
-  operationPrefix: string,
-): Promise<{ registered: number; initialized: number }> {
-  const namespace = kind === "event" ? env.EVENT_RUNTIME : env.TEAM_RUNTIME;
-  if (!namespace) throw new Error(kind + " runtime namespace is unavailable");
-  const markerPrefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
-  const existing = new Set(await step.do(operationPrefix + "-read-registration-markers", async () =>
-    listRuntimeRegistry(bucket, kind)));
-  const validKeys = [...new Set(keys)].filter((key) =>
-    kind === "event" ? /^[a-zA-Z0-9_-]+$/.test(key) : /^frc[0-9]+$/.test(key));
-  const missing = validKeys.filter((key) => !existing.has(key));
-  let initialized = 0;
-  // Each registration performs a Durable Object fetch and a registry write.
-  // Keep batches comfortably below the Workers per-invocation API request limit.
-  const registrationBatchSize = 10;
-  for (let offset = 0; offset < missing.length; offset += registrationBatchSize) {
-    const chunk = missing.slice(offset, offset + registrationBatchSize);
-    await step.do(operationPrefix + "-initialize-" + String(offset / registrationBatchSize).padStart(4, "0"), async () => {
-      let count = 0;
-      for (const key of chunk) {
-        const stub = namespace.get(namespace.idFromName(key));
-        const identityHeader = kind === "event" ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key";
-        const response = await stub.fetch(new Request("https://" + kind + "-runtime/register", {
-          method: "POST",
-          headers: {
-            Authorization: "Bearer " + env.RUNTIME_ADMIN_TOKEN,
-            [identityHeader]: key,
-          },
-        }));
-        if (!response.ok) {
-          throw new Error(kind + " runtime registration failed for " + key + " with HTTP " +
-            response.status + ": " + (await response.text()).slice(0, 300));
-        }
-        await bucket.put(markerPrefix + key + ".json", "{}");
-        count += 1;
-      }
-      return { initialized: count };
-    });
-    initialized += chunk.length;
-  }
-  return { registered: validKeys.length, initialized };
-}
-
 async function readPublishedSeason(bucket: DiscoveryServiceClient, year: number): Promise<{
   events: TbaEvent[];
   eventUpdatedAt: number;
