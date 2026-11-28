@@ -390,7 +390,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           // Roster membership is needed to initialize participating TeamRuntimes
           // as soon as an event enters this-week. EventRuntime owns any provider
           // acquisition required to make its participant resource available.
-          const participantsResponse = await dispatchRuntime(this.env, "event", eventKey, "participants", {}, discovery.year);
+          const participantsResponse = await dispatchRuntime(this.env, "event", eventKey, "participants", {
+            minimumIntervalMs,
+          }, discovery.year);
           if (participantsResponse.ok && participantsResponse.status !== 204) {
             const participants = await participantsResponse.json() as { team_keys?: unknown };
             participantKeys = [...new Set((Array.isArray(participants.team_keys) ? participants.team_keys : [])
