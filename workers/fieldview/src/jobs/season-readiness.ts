@@ -7,7 +7,7 @@ import { acquireRuntimeBootstrap } from "./runtime-bootstrap-acquisition.ts";
 
 type RefreshKind = "event" | "team";
 
-type SeasonWorkflowInput = { year: number; requestedAt?: number };
+type SeasonWorkflowInput = { year: number; requestedAt?: number; eventKeys?: string[] };
 type ResolverInput = { requestedAt?: number };
 
 export interface SeasonEnvironment extends RuntimeEnvironment {
@@ -104,7 +104,18 @@ async function runSeasonReadiness(
     if (!directory || directory.year !== year || !Array.isArray(directory.events)) {
       throw new Error("Event discovery for " + year + " is missing; run season discovery first");
     }
-    keys = [...new Set(directory.events.map((item) => item?.key).filter(validEvent))].sort();
+    const discoveredKeys = [...new Set(directory.events.map((item) => item?.key).filter(validEvent))].sort();
+    if (Array.isArray(event.payload?.eventKeys)) {
+      const requestedKeys = [...new Set(event.payload.eventKeys.filter(validEvent))];
+      const discovered = new Set(discoveredKeys);
+      if (!requestedKeys.length || requestedKeys.length !== event.payload.eventKeys.length ||
+          requestedKeys.some((key) => !discovered.has(key))) {
+        throw new Error("Event baseline child contains invalid or undiscovered event keys");
+      }
+      keys = requestedKeys;
+    } else {
+      keys = discoveredKeys;
+    }
   } else {
     const manifest = await readJson<{ year: number; complete?: boolean; teamCount?: number }>(env, "discovery/teams/" + year + ".json");
     const directory = await readJson<string[]>(env, "registry/teams/" + year + ".json");
@@ -119,6 +130,54 @@ async function runSeasonReadiness(
   const registry = await registeredKeys(env, kind);
   const registered = keys.filter((key) => registry.has(key));
   if (registered.length !== keys.length) throw new Error("Not all discovered " + kind + " runtimes were registered");
+
+  // The season-level event workflow is an orchestrator only. Each event gets
+  // its own Workflow invocation so Cloudflare's per-invocation subrequest
+  // budget is not consumed by a season-wide loop of Durable Object calls.
+  if (kind === "event" && !Array.isArray(event.payload?.eventKeys)) {
+    const chunkSize = 20;
+    let dispatched = 0;
+    for (let offset = 0; offset < keys.length; offset += chunkSize) {
+      const chunk = keys.slice(offset, offset + chunkSize);
+      await step.do("dispatch-event-baseline-children-" + offset, async () => {
+        for (const key of chunk) {
+          const childId = workflowId + "-event-" + key;
+          try {
+            await env.EVENT_SEASON_READINESS.create({
+              id: childId,
+              params: { year, requestedAt: startedAt, eventKeys: [key] },
+            });
+          } catch (error) {
+            const existing = await env.EVENT_SEASON_READINESS.get(childId).catch(() => null);
+            if (!existing) throw error;
+            const status = await existing.status();
+            if (status.status === "errored" || status.status === "terminated") {
+              throw new Error("Event baseline child " + status.status + ": " + childId);
+            }
+          }
+        }
+        return { dispatched: chunk.length, offset };
+      });
+      dispatched += chunk.length;
+    }
+    const summary = {
+      year, kind, entities_total: keys.length, entities_registered: registered.length,
+      children_dispatched: dispatched,
+    };
+    const completed = {
+      ...initial, status: "completed", updated_at: Date.now(), completed_at: Date.now(),
+      total: keys.length, result_chunks: 0, summary, error: null,
+    };
+    await step.do("persist-event-baseline-dispatch-results", async () => {
+      await store.put(prefix + "/summary.json", JSON.stringify(summary));
+      await store.put(prefix + "/record.json", JSON.stringify(completed));
+      await store.put("admin/workflow-runs/index/" + type + "/" + String(startedAt).padStart(16, "0") + "-" + workflowId + ".json",
+        JSON.stringify({ workflow_id: workflowId, workflow_type: type, year, started_at: startedAt, completed_at: completed.completed_at, status: "completed" }));
+      return completed;
+    });
+    return summary;
+  }
+
   const results: Array<{
     key: string; state_valid: boolean;
     bootstrapped: boolean; already_initialized?: boolean; resource_status?: string; error?: string;
