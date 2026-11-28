@@ -47,3 +47,14 @@ test("the season baseline seed is not gated by weekly projection membership", ()
   assert.doesNotMatch(registration, /WEEKLY_EVENT_PROJECTION|events-this-week|weekStart|weekEnd/);
   assert.match(registration, /EVENT_SEASON_READINESS\.create/);
 });
+
+
+test("event baseline seeding uses serial bounded child workflows", () => {
+  assert.match(readiness, /eventKeys\?: string\[\]/);
+  assert.match(readiness, /const chunkSize = 20/);
+  assert.match(readiness, /eventKeys: chunk/);
+  assert.match(readiness, /EVENT_SEASON_READINESS\.create/);
+  assert.match(readiness, /wait-event-baseline-child-/);
+  assert.match(readiness, /step\.sleep\([^\n]+, "10 seconds"\)/);
+  assert.match(readiness, /childStatus === "complete"/);
+});
