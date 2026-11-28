@@ -300,6 +300,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           const minimumIntervalMs = Number(this.env.EVENT_ACTIVE_INTERVAL_MS ?? 5 * 60_000);
           const readiness = await dispatchRuntime(this.env, "event", eventKey, "readiness", {
             minimumIntervalMs,
+            require_full_hydration: true,
           }, discovery.year);
           if (readiness.status === 204) {
             return { event_key: eventKey, lifecycle: candidate.lifecycle, event_refresh: "unavailable", analytics_state_failed: true };
@@ -423,7 +424,7 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
           typeof key === "string" && /^frc[0-9]+$/.test(key)))].sort()
       : [];
     const initialTeamCandidates = selectBudgetedKeys(
-      allDiscoveredTeamKeys.filter((teamKey) => !participantTeamKeys.has(teamKey)),
+      allDiscoveredTeamKeys,
       MAX_INITIAL_TEAM_ACQUISITIONS_PER_RUN,
       Math.floor(scheduledAt / (5 * 60_000)),
     );
@@ -656,7 +657,9 @@ export class PollingCoordinatorWorkflow extends WorkflowEntrypoint<PollingEnviro
       const readiness = await step.do("check-daily-team-runtime-readiness", async () =>
         mapLimit(registeredTeamKeys, 4, async (teamKey) => {
           try {
-            const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", {}, discovery.year);
+            const response = await dispatchRuntime(this.env, "team", teamKey, "readiness", {
+              require_full_hydration: true,
+            }, discovery.year);
             if (response.status === 204) return { teamKey, refresh: false, staleEndpoints: [] as string[], error: undefined as string | undefined };
             if (!response.ok) return { teamKey, refresh: false, staleEndpoints: [] as string[], error: "HTTP " + response.status };
             const body = await response.json() as { refresh_required?: boolean; stale_resources?: unknown };
