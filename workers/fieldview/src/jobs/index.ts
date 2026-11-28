@@ -257,9 +257,40 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           });
           return { kind, registered: next, total: valid.length, next: nextId };
         }
-        await update("record-event-registration-complete", { stage: "discovering_teams" });
+        // Season seeding must publish a baseline EventState for every discovered
+        // event, independent of the current-week projection. The dedicated
+        // EventSeasonReadiness workflow acquires only TBA Event + event teams
+        // into each EventRuntime; full hydration remains week-window driven.
+        const baselineSeedWorkflowId = jobId + "-event-baseline-seed";
+        await step.do("dispatch-event-baseline-seed", async () => {
+          try {
+            await this.env.EVENT_SEASON_READINESS.create({
+              id: baselineSeedWorkflowId,
+              params: { year: season, requestedAt },
+            });
+            return { workflow_id: baselineSeedWorkflowId, dispatched: true };
+          } catch (error) {
+            // Workflow creation is idempotent across a retried final registration
+            // batch. Accept an existing active or completed instance, but surface
+            // a terminal failure rather than silently claiming the seed ran.
+            const existing = await this.env.EVENT_SEASON_READINESS.get(baselineSeedWorkflowId).catch(() => null);
+            if (!existing) throw error;
+            const status = await existing.status();
+            if (status.status === "errored" || status.status === "terminated") {
+              throw new Error("Event baseline seed workflow " + status.status + ": " + baselineSeedWorkflowId);
+            }
+            return { workflow_id: baselineSeedWorkflowId, dispatched: false, existing_status: status.status };
+          }
+        });
+        await update("record-event-registration-complete", {
+          stage: "discovering_teams",
+          event_baseline_seed_workflow_id: baselineSeedWorkflowId,
+        });
         await child(jobId + "-team-directory", "discover-team-directory");
-        return { kind, registered: valid.length, next: "discover-team-directory" };
+        return {
+          kind, registered: valid.length, next: "discover-team-directory",
+          event_baseline_seed_workflow_id: baselineSeedWorkflowId,
+        };
       }
 
       if (payload.operation === "discover-team-directory") {
