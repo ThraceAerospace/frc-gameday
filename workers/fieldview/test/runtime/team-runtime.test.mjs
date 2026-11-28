@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { TeamRuntime, teamResourceEndpoints } from "../../src/runtime/team-runtime.ts";
+import { TBA_ENDPOINTS } from "../../../../packages/providers/tba/src/endpoints.ts";
+import { FRC_COLORS_ENDPOINTS } from "../../../../packages/providers/frc-colors/src/endpoints.ts";
 
 class MemoryStorage {
   values = new Map(); alarmAt = null;
@@ -978,4 +980,48 @@ test("TeamRuntime registration rejects unauthorized and mismatched identities wi
   }));
   assert.equal(mismatch.status, 400);
   assert.equal(storage.values.get("team-key"), "frc3461");
+});
+
+
+test("TeamRuntime baseline readiness treats FRC-Colors as optional while full hydration requires the resource set", async () => {
+  const storage = new MemoryStorage();
+  const teamKey = "frc3461", year = 2026, now = Date.now();
+  storage.values.set("team-key", teamKey);
+  for (const endpoint of [TBA_ENDPOINTS.team(teamKey), TBA_ENDPOINTS.teamEvents(teamKey, year)]) {
+    storage.values.set("endpoint:" + endpoint, {
+      endpoint, status: "available", data: [], providerData: [], etag: null,
+      lastFetchedAt: now, expiresAt: null, revision: 1, validatorRevision: 1,
+      lastAttemptAt: now, lastWebhookAt: null,
+    });
+  }
+  const colorsEndpoint = FRC_COLORS_ENDPOINTS.team(3461);
+  storage.values.set("endpoint:" + colorsEndpoint, {
+    endpoint: colorsEndpoint, status: "failed", data: null, providerData: null, etag: null,
+    lastFetchedAt: null, expiresAt: null, revision: 0, validatorRevision: 0,
+    lastAttemptAt: now, lastWebhookAt: null,
+  });
+  const runtime = new TeamRuntime({ storage }, env(async () => {
+    throw new Error("readiness must not acquire provider data");
+  }), teamKey);
+  const request = (body) => new Request("https://team/readiness?year=" + year, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer admin",
+      "X-FieldView-Team-Key": teamKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const baseline = await runtime.fetch(request({}));
+  assert.equal(baseline.status, 200);
+  const baselineBody = await baseline.json();
+  assert.equal(baselineBody.state_valid, true);
+  assert.equal(baselineBody.hydration_scope, "baseline");
+  assert.equal(baselineBody.refresh_required, false);
+  const full = await runtime.fetch(request({ require_full_hydration: true }));
+  assert.equal(full.status, 200);
+  const fullBody = await full.json();
+  assert.equal(fullBody.state_valid, false);
+  assert.equal(fullBody.hydration_scope, "full");
+  assert.ok(fullBody.stale_resources.includes(colorsEndpoint));
 });
