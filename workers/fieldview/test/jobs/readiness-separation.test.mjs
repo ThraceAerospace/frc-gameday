@@ -33,4 +33,10 @@ test("readiness executions persist indexed run records and chunked resource resu
   assert.match(readinessRunner, /results\//);
   assert.match(readinessRunner, /summary\.json/);
   assert.match(readinessRunner, /completed_with_errors/);
+  assert.match(readinessRunner, /for \(const key of registered\)/,
+    "each entity bootstrap must run in its own Workflow step to stay below the per-invocation subrequest limit");
+  assert.match(readinessRunner, /progress\/" \+ key \+ "\.json/,
+    "each completed entity result must be persisted immediately");
+  assert.doesNotMatch(readinessRunner, /mapWithConcurrency/,
+    "multiple provider acquisitions must not share one Worker invocation");
 });
