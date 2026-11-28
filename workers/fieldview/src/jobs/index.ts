@@ -223,7 +223,7 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
     const update = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) => step.do(name, async () => {
       const current = await readJson<AdminDiscoveryJobRecord>(store, jobKey);
       const next: AdminDiscoveryJobRecord = {
-        year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
+        mode: "year", status: "running", stage: "starting",
         events: 0, teams: 0, team_pages: 0, expected_team_pages: 0, failed_team_pages: [],
         warnings: [], team_directory_complete: false, steps: 0, error: null,
         started_at: requestedAt,
