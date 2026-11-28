@@ -139,30 +139,42 @@ async function runSeasonReadiness(
     let dispatched = 0;
     for (let offset = 0; offset < keys.length; offset += chunkSize) {
       const chunk = keys.slice(offset, offset + chunkSize);
-      await step.do("dispatch-event-baseline-children-" + offset, async () => {
-        for (const key of chunk) {
-          const childId = workflowId + "-event-" + key;
-          try {
-            await env.EVENT_SEASON_READINESS.create({
-              id: childId,
-              params: { year, requestedAt: startedAt, eventKeys: [key] },
-            });
-          } catch (error) {
-            const existing = await env.EVENT_SEASON_READINESS.get(childId).catch(() => null);
-            if (!existing) throw error;
-            const status = await existing.status();
-            if (status.status === "errored" || status.status === "terminated") {
-              throw new Error("Event baseline child " + status.status + ": " + childId);
-            }
+      const childId = workflowId + "-batch-" + String(offset / chunkSize).padStart(3, "0");
+      await step.do("dispatch-event-baseline-child-" + offset, async () => {
+        try {
+          await env.EVENT_SEASON_READINESS.create({
+            id: childId,
+            params: { year, requestedAt: startedAt, eventKeys: chunk },
+          });
+        } catch (error) {
+          const existing = await env.EVENT_SEASON_READINESS.get(childId).catch(() => null);
+          if (!existing) throw error;
+          const status = await existing.status();
+          if (status.status === "errored" || status.status === "terminated") {
+            throw new Error("Event baseline child " + status.status + ": " + childId);
           }
         }
-        return { dispatched: chunk.length, offset };
+        return { dispatched: chunk.length, offset, child_id: childId };
       });
+      // Keep batches serial: this bounds both per-invocation subrequests and
+      // aggregate TBA request pressure. Never launch the entire season at once.
+      let childStatus = "queued";
+      for (let attempt = 0; attempt < 360; attempt += 1) {
+        const child = await env.EVENT_SEASON_READINESS.get(childId);
+        const status = await child.status();
+        childStatus = status.status;
+        if (childStatus === "complete") break;
+        if (childStatus === "errored" || childStatus === "terminated") {
+          throw new Error("Event baseline child " + childStatus + ": " + childId);
+        }
+        await step.sleep("wait-event-baseline-child-" + offset + "-" + attempt, "10 seconds");
+      }
+      if (childStatus !== "complete") throw new Error("Timed out waiting for event baseline child " + childId);
       dispatched += chunk.length;
     }
     const summary = {
       year, kind, entities_total: keys.length, entities_registered: registered.length,
-      children_dispatched: dispatched,
+      children_dispatched: dispatched, batches: Math.ceil(keys.length / chunkSize),
     };
     const completed = {
       ...initial, status: "completed", updated_at: Date.now(), completed_at: Date.now(),
