@@ -36,7 +36,7 @@ interface JobsEnvironment extends RuntimeEnvironment, SeasonEnvironment {
 
 interface WorkflowParameters {
   scheduledAt?: number;
-  operation?: "discover-season" | "register-event-batch" | "discover-team-directory" | "register-team-batch";
+  operation?: "discover-season" | "register-event-batch" | "discover-team-directory";
   year?: number;
   requestedAt?: number;
   jobId?: string;
@@ -223,53 +223,43 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
         return { year: season, stage: "registering_events", events: directory.count, status: "running" };
       }
 
-      if (payload.operation === "register-event-batch" || payload.operation === "register-team-batch") {
-        const kind = payload.operation === "register-event-batch" ? "event" : "team";
-        const keys = kind === "event"
-          ? (await readJson<DiscoveryDocument>(store, `discovery/events/${season}.json`))?.events.map(item => item.key) ?? []
-          : await readJson<string[]>(store, `registry/teams/${season}.json`) ?? [];
-        const valid = [...new Set(keys)].filter(key => kind === "event" ? /^[a-zA-Z0-9_-]+$/.test(key) : /^frc[0-9]+$/.test(key));
+      if (payload.operation === "register-event-batch") {
+        const kind = "event";
+        const keys = (await readJson<DiscoveryDocument>(store, `discovery/events/${season}.json`))?.events.map(item => item.key) ?? [];
+        const valid = [...new Set(keys)].filter(key => /^[a-zA-Z0-9_-]+$/.test(key));
         const cursor = Math.max(0, Math.floor(payload.cursor ?? 0));
         const batchSize = 10;
         const batch = valid.slice(cursor, cursor + batchSize);
-        const namespace = kind === "event" ? this.env.EVENT_RUNTIME : this.env.TEAM_RUNTIME;
-        if (!namespace) throw new Error(kind + " runtime namespace is unavailable");
-        const markerPrefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
-        let initialized = 0;
+        const namespace = this.env.EVENT_RUNTIME;
+        if (!namespace) throw new Error("event runtime namespace is unavailable");
+        const markerPrefix = "registry/runtime-events/";
         for (const key of batch) {
-          await step.do("register-" + kind + "-" + key, async () => {
+          await step.do("register-event-" + key, async () => {
             if (await store.get(markerPrefix + key + ".json") !== null) return { alreadyRegistered: true };
-            const identityHeader = kind === "event" ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key";
-            const response = await namespace.get(namespace.idFromName(key)).fetch(new Request("https://" + kind + "-runtime/register", {
+            const response = await namespace.get(namespace.idFromName(key)).fetch(new Request("https://event-runtime/register", {
               method: "POST",
-              headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, [identityHeader]: key },
+              headers: {
+                Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN,
+                "X-FieldView-Event-Key": key,
+              },
             }));
-            if (!response.ok) throw new Error(kind + " runtime registration failed for " + key + " with HTTP " + response.status);
+            if (!response.ok) throw new Error("event runtime registration failed for " + key + " with HTTP " + response.status);
             await store.put(markerPrefix + key + ".json", "{}");
             return { registered: true };
           });
-          initialized++;
         }
         const next = cursor + batch.length;
         if (next < valid.length) {
-          const nextId = jobId + "-" + kind + "-registration-" + String(next).padStart(4, "0");
-          await child(nextId, payload.operation, next);
-          await update("record-" + kind + "-registration-progress-" + cursor, {
-            stage: kind === "event" ? "registering_events" : "registering_teams",
-            ...(kind === "event" ? { events: valid.length } : { teams: valid.length }),
+          const nextId = jobId + "-event-registration-" + String(next).padStart(4, "0");
+          await child(nextId, "register-event-batch", next);
+          await update("record-event-registration-progress-" + cursor, {
+            stage: "registering_events", events: valid.length,
           });
           return { kind, registered: next, total: valid.length, next: nextId };
         }
-        if (kind === "event") {
-          await update("record-event-registration-complete", { stage: "discovering_teams" });
-          await child(jobId + "-team-directory", "discover-team-directory");
-          return { kind, registered: valid.length, next: "discover-team-directory" };
-        }
-        await update("record-team-registration-complete", {
-          stage: "complete", status: "completed", teams: valid.length, team_directory_complete: true,
-          error: null,
-        });
-        return { kind, registered: valid.length, status: "completed" };
+        await update("record-event-registration-complete", { stage: "discovering_teams" });
+        await child(jobId + "-team-directory", "discover-team-directory");
+        return { kind, registered: valid.length, next: "discover-team-directory" };
       }
 
       if (payload.operation === "discover-team-directory") {
@@ -341,13 +331,16 @@ export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironm
           }
         }
         if (teamKeys.length === 0) throw new Error("TBA returned an empty team directory");
+        // Team directory publication is discovery only. TeamRuntime identities
+        // are registered lazily from active EventRuntime rosters, or by the
+        // separately triggerable baseline team-seed workflow.
         await update("record-team-directory-complete", {
-          stage: "registering_teams", teams: teamKeys.length, team_pages: expectedPages,
+          stage: "complete", status: "completed", teams: teamKeys.length, team_pages: expectedPages,
           expected_team_pages: expectedPages, failed_team_pages: [], warnings,
           team_directory_complete: true, team_generation: generation,
         });
-        await child(jobId + "-team-registration-0000", "register-team-batch");
-        return { year: season, stage: "registering_teams", teams: teamKeys.length };
+        return { year: season, stage: "complete", status: "completed", teams: teamKeys.length,
+          team_runtimes_registered: 0 };
       }
 
       throw new Error("Unsupported season discovery operation: " + String(payload.operation));
