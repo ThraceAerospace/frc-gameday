@@ -196,191 +196,220 @@ interface CoverageAuditRecord {
 }
 interface CoverageAuditParameters { year: number; workflowId: string; startedAt: number; }
 
-/** Manual season-discovery Workflow base; readiness is handled by independent year-scoped workflows. */
+/** Season discovery is deliberately phased: events first, then independently resumable teams. */
 export class SeasonDiscoveryWorkflowBase extends WorkflowEntrypoint<JobsEnvironment, WorkflowParameters> {
   async run(event: WorkflowEvent<WorkflowParameters>, step: WorkflowStep): Promise<Record<string, unknown>> {
-    if (event.payload?.operation !== "discover-season") {
-      throw new Error("Unsupported season discovery operation");
-    }
-    return this.discoverSeason(event.payload, step);
-  }
-
-  private async discoverSeason(
-    payload: WorkflowParameters,
-    step: WorkflowStep,
-  ): Promise<Record<string, unknown>> {
+    const payload = event.payload ?? {};
     const year = payload.year;
     const jobId = payload.jobId;
-    const requestedAt = payload.requestedAt;
-    if (!Number.isInteger(year) || year! < 1992 || year! > 2200 || !jobId || !requestedAt) {
-      throw new Error("Manual season discovery requires a valid year, job ID, and request timestamp");
+    if (!Number.isInteger(year) || year! < 1992 || year! > 2200 || !jobId) {
+      throw new Error("Season discovery requires a valid year and job ID");
     }
     const season = year!;
-    const jobKey = `admin/discovery-jobs/${season}.json`;
-    const updateJob = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) =>
-      step.do(name, async () => {
-        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryServiceClient(this.env), jobKey);
-        const defaults: AdminDiscoveryJobRecord = {
-          year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
-          events: 0, teams: 0, team_pages: 0, expected_team_pages: 0, failed_team_pages: [], warnings: [],
-          team_directory_complete: false, steps: 0, error: null,
-          started_at: requestedAt, updated_at: Date.now(),
-        };
-        const next: AdminDiscoveryJobRecord = {
-          ...defaults, ...(current ?? {}), ...patch,
-          ...{ workflow_id: jobId, year: season, updated_at: Date.now() },
-        };
-        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(next));
-        return next;
+    const store = createDiscoveryServiceClient(this.env);
+    const jobKey = \`admin/discovery-jobs/\${season}.json\`;
+    const job = await readJson<AdminDiscoveryJobRecord>(store, jobKey);
+    const requestedAt = payload.requestedAt ?? job?.started_at ?? Date.now();
+    const child = async (id: string, operation: WorkflowParameters["operation"]) => {
+      await step.do("schedule-" + id, async () => {
+        await this.env.SEASON_DISCOVERY.create({
+          id,
+          params: { operation, year: season, requestedAt, jobId },
+        });
+        return { id, operation };
       });
+    };
+    const update = async (name: string, patch: Partial<AdminDiscoveryJobRecord>) => step.do(name, async () => {
+      const current = await readJson<AdminDiscoveryJobRecord>(store, jobKey);
+      const next: AdminDiscoveryJobRecord = {
+        year: season, mode: "year", workflow_id: jobId, status: "running", stage: "starting",
+        events: 0, teams: 0, team_pages: 0, expected_team_pages: 0, failed_team_pages: [],
+        warnings: [], team_directory_complete: false, steps: 0, error: null,
+        started_at: requestedAt, updated_at: Date.now(),
+        ...(current ?? {}), ...patch, workflow_id: jobId, year: season, updated_at: Date.now(),
+      };
+      await store.put(jobKey, JSON.stringify(next));
+      return next;
+    });
 
     try {
-      // Canonical season status is resolved by its own Workflow and persisted
-      // in KV. Discovery only consumes the last resolved max_team_page bound.
-      const tbaStatus = await step.do("read-canonical-season-status", async () => {
-        const raw = await this.env.KV_BINDING?.get("system/canonical-season.json");
+      if (payload.operation === "discover-season") {
+        const raw = await step.do("read-canonical-season-status", async () =>
+          this.env.KV_BINDING?.get("system/canonical-season.json"));
         if (!raw) throw new Error("Canonical season status is missing; run the season status resolver first");
-        const resolved = JSON.parse(raw) as { year?: unknown; maxTeamPage?: unknown };
-        if (!Number.isInteger(resolved.year) || Number(resolved.year) < 1992 || Number(resolved.year) > 2200 ||
-            !Number.isInteger(resolved.maxTeamPage) || Number(resolved.maxTeamPage) < 0) {
-          throw new Error("Persisted canonical season status is invalid or missing max_team_page");
+        const canonical = JSON.parse(raw) as { year?: unknown; maxTeamPage?: unknown };
+        if (canonical.year !== season || !Number.isInteger(canonical.maxTeamPage) || Number(canonical.maxTeamPage) < 0) {
+          throw new Error("Canonical season status is invalid or does not match the requested year");
         }
-        return { year: Number(resolved.year), maxTeamPage: Number(resolved.maxTeamPage) };
-      });
-      await updateJob("record-discovery-started", { stage: "discovering_events" });
-      const generation = await step.do("allocate-season-directory-generation", async () => Date.now());
-      const eventChunkSize = 25;
-      const eventDirectory = await step.do("discover-manual-season-events", {
-        retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-      }, async () => {
-        const response = await createDiscoveryServiceClient(this.env).catalog("discover-event-directory", {
-          year: season, generation, chunkSize: eventChunkSize,
+        await update("record-event-discovery-started", { stage: "discovering_events" });
+        const generation = await step.do("allocate-season-directory-generation", async () => Date.now());
+        const eventChunkSize = 25;
+        const directory = await step.do("discover-season-events", {
+          retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+        }, async () => {
+          const response = await store.catalog("discover-event-directory", { year: season, generation, chunkSize: eventChunkSize });
+          if (!response.ok) throw new Error("Event directory acquisition returned HTTP " + response.status);
+          return response.json() as Promise<{ count: number; generation: number; chunkCount: number; needsChunking: boolean }>;
         });
-        if (!response.ok) throw new Error("Discovery service event directory acquisition returned HTTP " + response.status);
-        return response.json() as Promise<{
-          year: number; count: number; checkedAt: number; generation: number;
-          chunkCount: number; needsChunking: boolean;
-        }>;
-      });
-      await updateJob("record-event-discovery-progress", {
-        stage: "publishing_events", events: eventDirectory.count, steps: 2,
-      });
-
-      if (eventDirectory.needsChunking) {
-        for (let firstChunk = 0; firstChunk < eventDirectory.chunkCount; firstChunk += 10) {
-          const endChunk = Math.min(eventDirectory.chunkCount, firstChunk + 10);
-          await step.do(`write-manual-event-chunks-${firstChunk}`, async () => {
-            const response = await createDiscoveryServiceClient(this.env).catalog("write-event-chunks", {
-              year: season, generation: eventDirectory.generation,
-              firstChunk, endChunk, chunkSize: eventChunkSize,
+        if (directory.needsChunking) {
+          for (let first = 0; first < directory.chunkCount; first += 10) {
+            const last = Math.min(directory.chunkCount, first + 10);
+            await step.do("publish-event-chunks-" + first, async () => {
+              const response = await store.catalog("write-event-chunks", {
+                year: season, generation: directory.generation, firstChunk: first, endChunk: last, chunkSize: eventChunkSize,
+              });
+              if (!response.ok) throw new Error("Event chunk publication returned HTTP " + response.status);
+              return response.json();
             });
-            if (!response.ok) throw new Error("Discovery service event chunk write returned HTTP " + response.status);
+          }
+          await step.do("publish-event-directory", async () => {
+            const response = await store.catalog("publish-event-directory", { year: season, generation: directory.generation });
+            if (!response.ok) throw new Error("Event directory publication returned HTTP " + response.status);
             return response.json();
           });
         }
-        await step.do("publish-manual-event-directory", async () => {
-          const response = await createDiscoveryServiceClient(this.env).catalog("publish-event-directory", {
-            year: season, generation: eventDirectory.generation,
-          });
-          if (!response.ok) throw new Error("Discovery service event directory publication returned HTTP " + response.status);
-          return response.json();
-        });
+        await update("record-events-published", { stage: "registering_events", events: directory.count });
+        await child(jobId + "-event-registration-0000", "register-event-batch");
+        return { year: season, stage: "registering_events", events: directory.count, status: "running" };
       }
 
-      const expectedTeamPages = tbaStatus.maxTeamPage + 1;
-      const resume = await step.do("find-resumable-team-directory", async () => {
-        const response = await createDiscoveryServiceClient(this.env).catalog("resume-partial-team-directory", {
-          year: season, expectedPageCount: expectedTeamPages,
-        });
-        if (!response.ok) throw new Error("Discovery service partial directory lookup returned HTTP " + response.status);
-        return response.json() as Promise<{
-          resumable: boolean; generation?: number; teamKeys?: string[]; failedPages?: number[]; warnings?: string[];
-        }>;
-      });
-      const teamGeneration = resume.resumable && Number.isSafeInteger(resume.generation)
-        ? Number(resume.generation)
-        : await step.do("allocate-manual-team-directory-generation", async () => Date.now());
-      const teamKeys: string[] = [...(resume.resumable ? resume.teamKeys ?? [] : [])];
-      const failedTeamPages: number[] = [...(resume.resumable ? resume.failedPages ?? [] : [])];
-      const failedPageSet = new Set(failedTeamPages);
-      const warnings: string[] = [...(resume.resumable ? resume.warnings ?? [] : [])];
-      let teamPages = resume.resumable ? expectedTeamPages - failedTeamPages.length : 0;
-      for (let page = 0; page <= tbaStatus.maxTeamPage; page += 1) {
-        if (resume.resumable && !failedPageSet.has(page)) continue;
-        try {
-          const result = await step.do(`discover-manual-team-page-${page}`, {
-            retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
-          }, async () => {
-            const response = await createDiscoveryServiceClient(this.env).catalog("discover-team-page", {
-              year: season, generation: teamGeneration, page,
-            });
-            if (!response.ok) throw new Error("Discovery service team page acquisition returned HTTP " + response.status);
-            return response.json() as Promise<{ teamKeys: string[]; count: number }>;
+      if (payload.operation === "register-event-batch" || payload.operation === "register-team-batch") {
+        const kind = payload.operation === "register-event-batch" ? "event" : "team";
+        const keys = kind === "event"
+          ? (await readJson<DiscoveryDocument>(store, \`discovery/events/\${season}.json\`))?.events.map(item => item.key) ?? []
+          : await readJson<string[]>(store, \`registry/teams/\${season}.json\`) ?? [];
+        const valid = [...new Set(keys)].filter(key => kind === "event" ? /^[a-zA-Z0-9_-]+$/.test(key) : /^frc[0-9]+$/.test(key));
+        const cursor = Math.max(0, Math.floor(payload.cursor ?? 0));
+        const batchSize = 10;
+        const batch = valid.slice(cursor, cursor + batchSize);
+        const namespace = kind === "event" ? this.env.EVENT_RUNTIME : this.env.TEAM_RUNTIME;
+        if (!namespace) throw new Error(kind + " runtime namespace is unavailable");
+        const markerPrefix = kind === "event" ? "registry/runtime-events/" : "registry/runtime-teams/";
+        let initialized = 0;
+        for (const key of batch) {
+          await step.do("register-" + kind + "-" + key, async () => {
+            if (await store.get(markerPrefix + key + ".json") !== null) return { alreadyRegistered: true };
+            const identityHeader = kind === "event" ? "X-FieldView-Event-Key" : "X-FieldView-Team-Key";
+            const response = await namespace.get(namespace.idFromName(key)).fetch(new Request("https://" + kind + "-runtime/register", {
+              method: "POST",
+              headers: { Authorization: "Bearer " + this.env.RUNTIME_ADMIN_TOKEN, [identityHeader]: key },
+            }));
+            if (!response.ok) throw new Error(kind + " runtime registration failed for " + key + " with HTTP " + response.status);
+            await store.put(markerPrefix + key + ".json", "{}");
+            return { registered: true };
           });
-          teamKeys.push(...result.teamKeys);
-          failedPageSet.delete(page);
-          teamPages += 1;
-        } catch (error) {
-          failedPageSet.add(page);
-          warnings.push(`Team page ${page} failed after retries: ${error instanceof Error ? error.message : String(error)}`.slice(0, 500));
+          initialized++;
         }
-      }
-      failedTeamPages.splice(0, failedTeamPages.length, ...[...failedPageSet].sort((a, b) => a - b));
-      const uniqueTeamKeys = [...new Set(teamKeys)].sort();
-      if (failedTeamPages.length === 0 && uniqueTeamKeys.length === 0) {
-        throw new Error("TBA returned an empty team directory for the selected season");
-      }
-      await updateJob("record-team-discovery-progress", {
-        stage: "publishing_teams", teams: uniqueTeamKeys.length, team_pages: teamPages,
-        expected_team_pages: expectedTeamPages, failed_team_pages: failedTeamPages,
-        warnings, team_directory_complete: failedTeamPages.length === 0, team_generation: teamGeneration,
-        steps: 3 + expectedTeamPages,
-      });
-      const publication = await step.do("publish-manual-team-directory", async () => {
-        const response = await createDiscoveryServiceClient(this.env).catalog("publish-team-directory", {
-          year: season, generation: teamGeneration, pageCount: expectedTeamPages,
-          teamKeys: uniqueTeamKeys, failedPages: failedTeamPages, warnings,
+        const next = cursor + batch.length;
+        if (next < valid.length) {
+          const nextId = jobId + "-" + kind + "-registration-" + String(next).padStart(4, "0");
+          await child(nextId, payload.operation);
+          await update("record-" + kind + "-registration-progress-" + cursor, {
+            stage: kind === "event" ? "registering_events" : "registering_teams",
+            ...(kind === "event" ? { events: valid.length } : { teams: valid.length }),
+          });
+          return { kind, registered: next, total: valid.length, next: nextId };
+        }
+        if (kind === "event") {
+          await update("record-event-registration-complete", { stage: "discovering_teams" });
+          await child(jobId + "-team-directory", "discover-team-directory");
+          return { kind, registered: valid.length, next: "discover-team-directory" };
+        }
+        await update("record-team-registration-complete", {
+          stage: "complete", status: "completed", teams: valid.length, team_directory_complete: true,
+          error: null,
         });
-        if (!response.ok) throw new Error("Discovery service team directory publication returned HTTP " + response.status);
-        return response.json() as Promise<{ status: "completed" | "partial"; complete: boolean }>;
-      });
-      if (publication.complete) {
-        await registerDiscoveredRuntimes(this.env, createDiscoveryServiceClient(this.env), step,
-          "team", uniqueTeamKeys, "manual-discovery-team-runtime-registration");
+        return { kind, registered: valid.length, status: "completed" };
       }
-      const publishedEvents = await readJson<DiscoveryDocument>(
-        createDiscoveryServiceClient(this.env), `discovery/events/${season}.json`);
-      await registerDiscoveredRuntimes(this.env, createDiscoveryServiceClient(this.env), step,
-        "event", (publishedEvents?.events ?? []).map((item) => item.key),
-        "manual-discovery-event-runtime-registration");
-      const partial = publication.status === "partial";
-      const summary = {
-        year: season, mode: "year", workflow_id: jobId, status: partial ? "partial" : "completed",
-        stage: partial ? "partial" : "complete",
-        events: eventDirectory.count, teams: uniqueTeamKeys.length, team_pages: teamPages,
-        expected_team_pages: expectedTeamPages, failed_team_pages: failedTeamPages,
-        warnings, team_directory_complete: publication.complete, team_generation: teamGeneration,
-        steps: 4 + expectedTeamPages + (eventDirectory.needsChunking ? Math.ceil(eventDirectory.chunkCount / 10) + 1 : 0),
-        error: null, started_at: requestedAt, updated_at: Date.now(),
-      };
-      await step.do("publish-manual-discovery-summary", async () => {
-        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(summary));
-        return summary;
-      });
-      return summary;
+
+      if (payload.operation === "discover-team-directory") {
+        const raw = await step.do("read-canonical-team-page-bound", async () =>
+          this.env.KV_BINDING?.get("system/canonical-season.json"));
+        if (!raw) throw new Error("Canonical season status is missing");
+        const canonical = JSON.parse(raw) as { year?: unknown; maxTeamPage?: unknown };
+        if (canonical.year !== season || !Number.isInteger(canonical.maxTeamPage) || Number(canonical.maxTeamPage) < 0) {
+          throw new Error("Canonical season status is invalid");
+        }
+        const expectedPages = Number(canonical.maxTeamPage) + 1;
+        const existingManifest = await readJson<{ complete?: boolean; teamCount?: number; pageCount?: number; generation?: number }>(
+          store, \`discovery/teams/\${season}.json\`);
+        const existingKeys = await readJson<string[]>(store, \`registry/teams/\${season}.json\`);
+        let generation: number;
+        let teamKeys: string[];
+        let failedPages: number[];
+        let warnings: string[];
+        if (existingManifest?.complete === true && Array.isArray(existingKeys) &&
+            existingKeys.length === existingManifest.teamCount && existingManifest.pageCount === expectedPages) {
+          generation = Number(existingManifest.generation);
+          teamKeys = existingKeys;
+          failedPages = [];
+          warnings = [];
+        } else {
+          const resume = await step.do("find-resumable-team-directory", async () => {
+            const response = await store.catalog("resume-partial-team-directory", { year: season, expectedPageCount: expectedPages });
+            if (!response.ok) throw new Error("Partial team directory lookup returned HTTP " + response.status);
+            return response.json() as Promise<{ resumable: boolean; generation?: number; teamKeys?: string[]; failedPages?: number[]; warnings?: string[] }>;
+          });
+          generation = resume.resumable && Number.isSafeInteger(resume.generation)
+            ? Number(resume.generation) : await step.do("allocate-team-directory-generation", async () => Date.now());
+          teamKeys = [...(resume.resumable ? resume.teamKeys ?? [] : [])];
+          failedPages = [...(resume.resumable ? resume.failedPages ?? [] : Array.from({ length: expectedPages }, (_, i) => i))];
+          warnings = [...(resume.resumable ? resume.warnings ?? [] : [])];
+          const failed = new Set(failedPages);
+          for (let page = 0; page < expectedPages; page++) {
+            if (!failed.has(page)) continue;
+            const result = await step.do("discover-team-page-" + page, {
+              retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
+            }, async () => {
+              const response = await store.catalog("discover-team-page", { year: season, generation, page });
+              if (!response.ok) throw new Error("Team page " + page + " returned HTTP " + response.status);
+              return response.json() as Promise<{ teamKeys: string[] }>;
+            });
+            teamKeys.push(...result.teamKeys);
+            failed.delete(page);
+          }
+          failedPages = [...failed].sort((a, b) => a - b);
+          teamKeys = [...new Set(teamKeys)].sort();
+          const published = await step.do("publish-team-directory", async () => {
+            const response = await store.catalog("publish-team-directory", {
+              year: season, generation, pageCount: expectedPages, teamKeys, failedPages, warnings,
+            });
+            if (!response.ok) throw new Error("Team directory publication returned HTTP " + response.status);
+            return response.json() as Promise<{ complete: boolean; status: "completed" | "partial" }>;
+          });
+          if (!published.complete) {
+            await update("record-team-directory-partial", {
+              stage: "team_directory_partial", teams: teamKeys.length, team_pages: expectedPages - failedPages.length,
+              expected_team_pages: expectedPages, failed_team_pages: failedPages, warnings,
+              team_directory_complete: false, team_generation: generation, status: "partial",
+            });
+            return { year: season, status: "partial", failedPages, teams: teamKeys.length };
+          }
+        }
+        if (teamKeys.length === 0) throw new Error("TBA returned an empty team directory");
+        await update("record-team-directory-complete", {
+          stage: "registering_teams", teams: teamKeys.length, team_pages: expectedPages,
+          expected_team_pages: expectedPages, failed_team_pages: [], warnings,
+          team_directory_complete: true, team_generation: generation,
+        });
+        await child(jobId + "-team-registration-0000", "register-team-batch");
+        return { year: season, stage: "registering_teams", teams: teamKeys.length };
+      }
+
+      throw new Error("Unsupported season discovery operation: " + String(payload.operation));
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      await step.do("record-manual-discovery-failure", async () => {
-        const current = await readJson<AdminDiscoveryJobRecord>(createDiscoveryServiceClient(this.env), jobKey);
+      await step.do("record-discovery-phase-failure", async () => {
+        const current = await readJson<AdminDiscoveryJobRecord>(store, jobKey);
         const failed: AdminDiscoveryJobRecord = {
           year: season, mode: "year", workflow_id: jobId, status: "failed", stage: current?.stage ?? "failed",
           events: current?.events ?? 0, teams: current?.teams ?? 0, team_pages: current?.team_pages ?? 0,
           expected_team_pages: current?.expected_team_pages, failed_team_pages: current?.failed_team_pages,
           warnings: current?.warnings, team_directory_complete: current?.team_directory_complete ?? false,
-          team_generation: current?.team_generation, steps: current?.steps ?? 0, error: detail.slice(0, 500),
-          started_at: requestedAt, updated_at: Date.now(),
+          team_generation: current?.team_generation, steps: current?.steps ?? 0,
+          error: detail.slice(0, 500), started_at: requestedAt, updated_at: Date.now(),
         };
-        await createDiscoveryServiceClient(this.env).put(jobKey, JSON.stringify(failed));
+        await store.put(jobKey, JSON.stringify(failed));
         return failed;
       });
       throw error;
