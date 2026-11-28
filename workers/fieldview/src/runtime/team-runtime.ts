@@ -751,10 +751,10 @@ export class TeamRuntime extends DurableObjectBase {
         TBA_ENDPOINTS.teamEvents(this.teamKey, year),
       ]);
       const expectedResources = requireFullHydration
-        ? resources
+        ? resources.filter((resource) => resource.provider !== "frc-colors")
         : resources.filter((resource) => baselineEndpoints.has(resource.endpoint));
       const states = await this.storage.list<TeamEndpointState<unknown>>({ prefix: ENDPOINT_PREFIX });
-      // FRC-Colors is deliberately optional in the baseline tier. It is retained
+      // FRC-Colors is deliberately optional in every readiness tier. It is retained
       // when available, but its absence or failure never blocks TeamRuntime readiness.
       const validState = expectedResources.every(({ endpoint }) => {
         const source = states.get(endpointKey(endpoint));
