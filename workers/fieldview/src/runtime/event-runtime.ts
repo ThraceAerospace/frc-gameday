@@ -396,9 +396,10 @@ export class EventRuntime extends DurableObjectBase {
       }
       const allowed = new Set([...this.allowedEndpoints, STATBOTICS_ENDPOINTS.matches({ event: this.eventKey }, 1000, 0)]);
       const required = new Set([TBA_ENDPOINTS.event(this.eventKey), TBA_ENDPOINTS.eventTeams(this.eventKey)]);
-      if (body.resources.some((resource) => !allowed.has(resource.endpoint)) ||
+      if (body.resources.length !== required.size ||
+          body.resources.some((resource) => !allowed.has(resource.endpoint) || !required.has(resource.endpoint)) ||
           [...required].some((endpoint) => !body.resources.some((resource) => resource.endpoint === endpoint))) {
-        return Response.json({ error: "Bootstrap must contain the event and participant baseline resources only" }, { status: 400 });
+        return Response.json({ error: "Event bootstrap must contain exactly the event and participant baseline resources" }, { status: 400 });
       }
       const receipt = await this.storage.transaction(async (tx) => {
         const receiptKey = "bootstrap:accepted:" + year;
