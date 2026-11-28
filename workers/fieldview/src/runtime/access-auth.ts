@@ -157,16 +157,27 @@ export async function isCloudflareAccessAdmin(
   // require a signed Cloudflare Access JWT and the administrator allowlist.
   if (isExplicitLocalAdminRequest(request, env)) return true;
 
-  const issuer = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
+  // Keep the public response generic, but emit a safe reason code so failures
+  // can be diagnosed from Workers Observability without ever logging a JWT,
+  // identity claim, email address, or signing material.
+  const reject = (reason: string): false => {
+    console.warn("[AUTH] Cloudflare Access administrator verification rejected", { reason });
+    return false;
+  };
+n  const issuer = normalizeTeamDomain(env.CF_ACCESS_TEAM_DOMAIN);
   const audience = env.CF_ACCESS_AUD?.trim();
   const allowlist = configuredAdminEmails(env.RUNTIME_ADMIN_EMAILS);
   const token = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (!issuer || !audience || allowlist.size === 0 || !token || token.length > MAX_TOKEN_LENGTH) {
-    return false;
-  }
+  if (!issuer) return reject("invalid_or_missing_team_domain");
+  if (!audience) return reject("missing_application_audience");
+  if (allowlist.size === 0) return reject("empty_administrator_allowlist");
+  if (!token) return reject("access_jwt_header_missing");
+  if (token.length > MAX_TOKEN_LENGTH) return reject("access_jwt_too_large");
 
   const parts = token.split(".");
-  if (parts.length !== 3 || parts.some((part) => part.length === 0)) return false;
+  if (parts.length !== 3 || parts.some((part) => part.length === 0)) {
+    return reject("access_jwt_structure_invalid");
+  }
 
   try {
     const claims = decodeJsonPart<AccessClaims>(parts[1]);
@@ -174,14 +185,25 @@ export async function isCloudflareAccessAdmin(
       ? [claims.aud]
       : Array.isArray(claims.aud) ? claims.aud : [];
     const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
-    if (claims.iss !== issuer || !audiences.includes(audience) ||
-        typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || claims.exp <= nowSeconds ||
-        (claims.nbf !== undefined && (typeof claims.nbf !== "number" || !Number.isFinite(claims.nbf) || claims.nbf > nowSeconds)) ||
-        typeof claims.iat !== "number" || !Number.isFinite(claims.iat) || claims.iat > nowSeconds + 60 ||
-        !allowlist.has(email)) return false;
+    if (claims.iss !== issuer) return reject("issuer_claim_mismatch");
+    if (!audiences.includes(audience)) return reject("audience_claim_mismatch");
+    if (typeof claims.exp !== "number" || !Number.isFinite(claims.exp) || claims.exp <= nowSeconds) {
+      return reject("expiration_claim_invalid");
+    }
+    if (claims.nbf !== undefined &&
+        (typeof claims.nbf !== "number" || !Number.isFinite(claims.nbf) || claims.nbf > nowSeconds)) {
+      return reject("not_before_claim_invalid");
+    }
+    if (typeof claims.iat !== "number" || !Number.isFinite(claims.iat) || claims.iat > nowSeconds + 60) {
+      return reject("issued_at_claim_invalid");
+    }
+    if (!allowlist.has(email)) return reject("identity_not_allowlisted");
 
-    return await verifySignature(parts, issuer, env.fetcher ?? fetch);
+    if (!await verifySignature(parts, issuer, env.fetcher ?? fetch)) {
+      return reject("signature_invalid_or_signing_key_unmatched");
+    }
+    return true;
   } catch {
-    return false;
+    return reject("jwks_fetch_or_signature_verification_error");
   }
 }
