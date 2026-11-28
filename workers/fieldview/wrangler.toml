@@ -26,8 +26,7 @@ enabled = true
 head_sampling_rate = 0.1
 
 [vars]
-# Administrator Access variables are configured per environment in the dashboard:
-# CF_ACCESS_TEAM_DOMAIN, CF_ACCESS_AUD, RUNTIME_ADMIN_EMAILS.
+# Production Access identity values remain managed in the production dashboard.
 TBA_AUTHORITATIVE_REFETCH_DELAY_MS = "65000"
 STATBOTICS_API_BASE_URL = "https://api-statbotics.iterativerefinement.com/"
 STATBOTICS_REFRESH_DELAY_MS = "300000"
@@ -140,6 +139,9 @@ binding = "KV_BINDING"
 id = "19ef5d5221654ab4bac0c8118c35ad8b"
 
 [previews.vars]
+# Preview Access app identity; administrator allowlist is a Preview Base secret.
+CF_ACCESS_TEAM_DOMAIN = "round-rice-3b7b.cloudflareaccess.com"
+CF_ACCESS_AUD = "a30d89715c2a6857ab19db7d65de9b42061d6262c14e3ef3033d09424c6e3572"
 TBA_AUTHORITATIVE_REFETCH_DELAY_MS = "65000"
 STATBOTICS_API_BASE_URL = "https://api-statbotics.iterativerefinement.com/"
 STATBOTICS_REFRESH_DELAY_MS = "300000"
